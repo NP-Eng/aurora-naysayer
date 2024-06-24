@@ -150,6 +150,7 @@ fn absorb_public_parameters<F, PCS>(
 ) where
     F: PrimeField + Absorb,
     PCS: PolynomialCommitment<F, DensePolynomial<F>>,
+    PCS::VerifierKey: Absorb,
 {
     let ConstraintMatrices {
         a,
@@ -160,8 +161,7 @@ fn absorb_public_parameters<F, PCS>(
         ..
     } = matrices;
     sponge.absorb(&"Aurora".as_bytes());
-    // TODO bound PCS::VerifierKey: Absorb, implement it for Ligero
-    //    sponge.absorb(vk);
+    sponge.absorb(vk);
     sponge.absorb(&num_instance_variables);
     sponge.absorb(&num_witness_variables);
     absorb_matrix(&a, sponge, "A");
@@ -178,6 +178,7 @@ fn aurora_prove<F, PCS>(
 where
     F: PrimeField + Absorb,
     PCS: PolynomialCommitment<F, DensePolynomial<F>>,
+    PCS::VerifierKey: Absorb,
 {
     assert!(
         is_padded(&r1cs),
@@ -340,6 +341,7 @@ fn aurora_verify<F, PCS>(
 where
     F: PrimeField + Absorb,
     PCS: PolynomialCommitment<F, DensePolynomial<F>>,
+    PCS::VerifierKey: Absorb,
 {
     assert!(
         is_padded(&r1cs),
