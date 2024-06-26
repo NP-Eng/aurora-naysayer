@@ -14,7 +14,7 @@ use utils::*;
 #[cfg(test)]
 mod tests;
 
-mod error;
+pub mod error;
 mod utils;
 
 pub struct AuroraProof<F, PCS>

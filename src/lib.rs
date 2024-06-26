@@ -1,6 +1,5 @@
-mod aurora;
-pub use aurora::AuroraR1CS;
-
+pub mod aurora;
+mod naysayer;
 mod reader;
 
 #[cfg(test)]
@@ -12,3 +11,5 @@ macro_rules! TEST_DATA_PATH {
 
 #[cfg(test)]
 pub(crate) use TEST_DATA_PATH;
+
+pub use aurora::AuroraR1CS;
