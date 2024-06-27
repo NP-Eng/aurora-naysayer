@@ -15,16 +15,16 @@ use utils::*;
 mod tests;
 
 pub mod error;
-mod utils;
+pub mod utils;
 
 pub struct AuroraProof<F, PCS>
 where
     F: PrimeField,
     PCS: PolynomialCommitment<F, DensePolynomial<F>>,
 {
-    commitments: Vec<LabeledCommitment<PCS::Commitment>>,
-    proof: PCS::Proof,
-    evals: Vec<F>,
+    pub(crate) commitments: Vec<LabeledCommitment<PCS::Commitment>>,
+    pub(crate) proof: PCS::Proof,
+    pub(crate) evals: Vec<F>,
 }
 
 pub struct AuroraR1CS<F>
@@ -32,7 +32,7 @@ where
     F: PrimeField + Absorb,
 {
     r1cs: ConstraintSystem<F>,
-    unpadded_num_instance_variables: usize,
+    pub(crate) unpadded_num_instance_variables: usize,
 }
 
 impl<F> AuroraR1CS<F>
