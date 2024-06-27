@@ -7,9 +7,13 @@ use ark_std::rand::RngCore;
 
 use crate::{aurora::{AuroraProof, error::AuroraError}, AuroraR1CS};
 
-pub enum AuroraNaysayerProof {
-    /// TODO documentation
-    Case1
+pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>> {
+    // The proof of PCS: open is incorrect, and the NS:NaysayerProof shows it
+    PCS(NS::NaysayerProof),
+    // The zero check equality does not hold
+    ZeroCheck,
+    // The univariate sumcheck equality does not hold
+    UnivariateSumcheck,
 }
 
 // pub fn naysay<PCS: PolynomialCommitment<F, DensePolynomial<F>>>(
