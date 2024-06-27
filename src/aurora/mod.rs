@@ -76,7 +76,7 @@ where
     }
 
     pub fn prove<PCS: PolynomialCommitment<F, DensePolynomial<F>>>(
-        &mut self,
+        &self,
         instance: Vec<F>,
         witness: Vec<F>,
         ck: &PCS::CommitterKey,
