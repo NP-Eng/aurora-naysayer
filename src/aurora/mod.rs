@@ -8,6 +8,7 @@ use ark_poly::{
 };
 use ark_poly_commit::{LabeledCommitment, PolynomialCommitment};
 use ark_relations::r1cs::{ConstraintMatrices, ConstraintSystem};
+use derivative::Derivative;
 use error::AuroraError;
 use utils::*;
 
@@ -17,6 +18,8 @@ mod tests;
 pub mod error;
 pub mod utils;
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct AuroraProof<F, PCS>
 where
     F: PrimeField,

@@ -3,6 +3,7 @@ use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, EvaluationDomain, GeneralEvaluationDomain};
 use ark_poly_naysayer::PCSNaysayer;
 use ark_relations::r1cs::ConstraintMatrices;
+use derivative::Derivative;
 
 use crate::{
     aurora::{error::AuroraError, utils::*, AuroraProof},
@@ -12,6 +13,8 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""), PartialEq(bound= ""))]
 pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>> {
     // The proof of PCS: open is incorrect, and the NS:NaysayerProof shows it
     PCS(NS::NaysayerProof),
