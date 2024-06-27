@@ -1,10 +1,16 @@
 use ark_crypto_primitives::sponge::{Absorb, CryptographicSponge};
 use ark_ff::PrimeField;
-use ark_poly::{univariate::DensePolynomial, GeneralEvaluationDomain, EvaluationDomain};
+use ark_poly::{univariate::DensePolynomial, EvaluationDomain, GeneralEvaluationDomain};
 use ark_poly_naysayer::PCSNaysayer;
 use ark_relations::r1cs::ConstraintMatrices;
 
-use crate::{aurora::{AuroraProof, error::AuroraError, utils::*}, AuroraR1CS};
+use crate::{
+    aurora::{error::AuroraError, utils::*, AuroraProof},
+    AuroraR1CS,
+};
+
+#[cfg(test)]
+mod tests;
 
 pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>> {
     // The proof of PCS: open is incorrect, and the NS:NaysayerProof shows it
@@ -24,17 +30,19 @@ pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePol
 // we have the comprehensive non-assertion-error-handling implementation, in
 // which case non-assertion-errors will be one more case of the naysayer proof
 // and the return type here will be Option<AuroraNaysayerProof>
-fn aurora_naysay<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>>(
+fn aurora_naysay<F, NS>(
     aurora_r1cs: &AuroraR1CS<F>,
     vk: &NS::VerifierKey,
     aurora_proof: AuroraProof<F, NS>,
     instance: Vec<F>,
     sponge: &mut impl CryptographicSponge,
-) -> Result<Option<AuroraNaysayerProof<F, NS>>, AuroraError<F, NS>>
+) -> Result<Option<AuroraNaysayerProof<F, NS>>, AuroraError<F, NS>> 
+where
+    F: PrimeField + Absorb,
+    NS: PCSNaysayer<F, DensePolynomial<F>>,
 {
-    
     let r1cs = aurora_r1cs.r1cs();
-    
+
     // TODO Return non-assertion error
     assert_padded(r1cs);
 
@@ -91,7 +99,7 @@ fn aurora_naysay<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>>
     if let Some(pcs_naysayer_proof) = pcs_naysay {
         return Ok(Some(AuroraNaysayerProof::PCS(pcs_naysayer_proof)));
     }
-    
+
     // ======================== Zero test ========================
 
     // Evaluations of the committed polynomials at a_point
@@ -113,8 +121,7 @@ fn aurora_naysay<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>>
     }
 
     // ======================== Univariate sumcheck test ========================
-    let zero_padded_instance =
-        [instance.clone(), vec![F::ZERO; num_witness_variables]].concat();
+    let zero_padded_instance = [instance.clone(), vec![F::ZERO; num_witness_variables]].concat();
 
     let lagrange_basis_evals = h.evaluate_all_lagrange_coefficients(a_point);
 
@@ -139,12 +146,9 @@ fn aurora_naysay<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>>
     let powers_of_r = powers(r, n);
     let p_r_a = h_evaluate_interpolator(&powers_of_r);
 
-    let q_ar_a =
-        h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&a, &powers_of_r));
-    let q_br_a =
-        h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&b, &powers_of_r));
-    let q_cr_a =
-        h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&c, &powers_of_r));
+    let q_ar_a = h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&a, &powers_of_r));
+    let q_br_a = h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&b, &powers_of_r));
+    let q_cr_a = h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&c, &powers_of_r));
 
     let r_pow_n = r * powers_of_r[n - 1];
 
@@ -166,15 +170,18 @@ fn aurora_naysay<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>>
 ///   proof points to a non-issue
 /// - Err if another type of error occurs during verification of the
 ///   naysayer proof.
-fn aurora_verify_naysay<'a, F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>>(
+fn aurora_verify_naysay<'a, F, NS>(
     vk: &NS::VerifierKey,
     aurora_r1cs: &AuroraR1CS<F>,
     original_proof: &AuroraProof<F, NS>,
     naysayer_proof: &AuroraNaysayerProof<F, NS>,
     instance: Vec<F>,
     sponge: &mut impl CryptographicSponge,
-) -> Result<bool, AuroraError<F, NS>> {
-
+) -> Result<bool, AuroraError<F, NS>> 
+where
+    F: PrimeField + Absorb,
+    NS: PCSNaysayer<F, DensePolynomial<F>>,
+{
     let r1cs = aurora_r1cs.r1cs();
     let matrices = r1cs.to_matrices().unwrap();
 
@@ -216,9 +223,18 @@ fn aurora_verify_naysay<'a, F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePoly
     // TODO review code structure and decide whether it is better to
     // transform this match into a list of sequential ifs,
     match naysayer_proof {
-        AuroraNaysayerProof::PCS(pcs_naysayer_proof) => Ok(NS::verify_naysay(vk, com, &a_point, evals.clone(), proof, pcs_naysayer_proof, sponge, None).unwrap()),
+        AuroraNaysayerProof::PCS(pcs_naysayer_proof) => Ok(NS::verify_naysay(
+            vk,
+            com,
+            &a_point,
+            evals.clone(),
+            proof,
+            pcs_naysayer_proof,
+            sponge,
+            None,
+        )
+        .unwrap()),
         _ => {
-
             // ======================== Zero test ========================
 
             // Evaluations of the committed polynomials at a_point
@@ -243,7 +259,8 @@ fn aurora_verify_naysay<'a, F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePoly
 
                     let lagrange_basis_evals = h.evaluate_all_lagrange_coefficients(a_point);
 
-                    let h_evaluate_interpolator = |evals: &Vec<F>| inner_product(&evals, &lagrange_basis_evals);
+                    let h_evaluate_interpolator =
+                        |evals: &Vec<F>| inner_product(&evals, &lagrange_basis_evals);
 
                     let v_star_a = h_evaluate_interpolator(&zero_padded_instance);
 
@@ -259,12 +276,18 @@ fn aurora_verify_naysay<'a, F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePoly
                     let powers_of_r = powers(r, n);
                     let p_r_a = h_evaluate_interpolator(&powers_of_r);
 
-                    let q_ar_a =
-                        h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&a, &powers_of_r));
-                    let q_br_a =
-                        h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&b, &powers_of_r));
-                    let q_cr_a =
-                        h_evaluate_interpolator(&random_matrix_polynomial_evaluations(&c, &powers_of_r));
+                    let q_ar_a = h_evaluate_interpolator(&random_matrix_polynomial_evaluations(
+                        &a,
+                        &powers_of_r,
+                    ));
+                    let q_br_a = h_evaluate_interpolator(&random_matrix_polynomial_evaluations(
+                        &b,
+                        &powers_of_r,
+                    ));
+                    let q_cr_a = h_evaluate_interpolator(&random_matrix_polynomial_evaluations(
+                        &c,
+                        &powers_of_r,
+                    ));
 
                     let r_pow_n = r * powers_of_r[n - 1];
 
@@ -273,9 +296,9 @@ fn aurora_verify_naysay<'a, F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePoly
                         + (p_r_a * f_c_a - q_cr_a * f_z_a) * (r_pow_n * r_pow_n);
 
                     return Ok(u_a != g_1_a * v_h_a + g_2_a * a_point);
-                },
+                }
                 _ => unreachable!(),
             }
-        }  
+        }
     }
 }
