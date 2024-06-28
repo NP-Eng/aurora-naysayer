@@ -6,7 +6,7 @@ use ark_relations::r1cs::ConstraintMatrices;
 use derivative::Derivative;
 
 use crate::{
-    aurora::{error::AuroraError, utils::*, AuroraProof},
+    aurora::{error::AuroraError, utils::*, AuroraProof, AuroraVerifierKey},
     AuroraR1CS,
 };
 
@@ -14,10 +14,12 @@ use crate::{
 mod tests;
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), PartialEq(bound= ""))]
+#[derivative(Debug(bound = ""), PartialEq(bound = ""))]
 pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePolynomial<F>>> {
-    // The proof of PCS: open is incorrect, and the NS:NaysayerProof shows it
-    PCS(NS::NaysayerProof),
+    // The proof of PCS: open is incorrect for one of f_a, f_b, f_c, f_0, f_w and/or g_1
+    PCSLarge(NS::NaysayerProof),
+    // The proof of PCS: open is incorrect for g_2
+    PCSG2(NS::NaysayerProof),
     // The zero check equality does not hold
     ZeroCheck,
     // The univariate sumcheck equality does not hold
@@ -34,17 +36,24 @@ pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePol
 // which case non-assertion-errors will be one more case of the naysayer proof
 // and the return type here will be Option<AuroraNaysayerProof>
 fn aurora_naysay<F, NS>(
-    aurora_r1cs: &AuroraR1CS<F>,
-    vk: &NS::VerifierKey,
+    vk: &AuroraVerifierKey<F, NS>,
     aurora_proof: AuroraProof<F, NS>,
     instance: Vec<F>,
     sponge: &mut impl CryptographicSponge,
-) -> Result<Option<AuroraNaysayerProof<F, NS>>, AuroraError<F, NS>> 
+) -> Result<Option<AuroraNaysayerProof<F, NS>>, AuroraError<F, NS>>
 where
     F: PrimeField + Absorb,
     NS: PCSNaysayer<F, DensePolynomial<F>>,
 {
-    let r1cs = aurora_r1cs.r1cs();
+    let AuroraVerifierKey {
+        r1cs:
+            AuroraR1CS {
+                r1cs,
+                unpadded_num_instance_variables,
+            },
+        vk_large,
+        vk_small,
+    } = vk;
 
     // TODO Return non-assertion error
     assert_padded(r1cs);
@@ -53,7 +62,7 @@ where
     let matrices = r1cs.to_matrices().unwrap();
 
     // 0. Initialising sponge with public parameters
-    absorb_public_parameters::<F, NS>(vk, &matrices, sponge);
+    absorb_public_parameters::<F, NS>((vk_large, vk_small), &matrices, sponge);
 
     let ConstraintMatrices {
         a,
@@ -66,17 +75,20 @@ where
     } = matrices;
 
     let AuroraProof {
-        commitments: com,
-        proof,
-        evals,
+        large_coms,
+        com_g_2,
+        large_opening_proof,
+        g_2_opening_proof,
+        large_evals,
+        g_2_a,
     } = aurora_proof;
 
     // Checking instance and witness lengths
     // TODO Return non-assertion error
-    if instance.len() != aurora_r1cs.unpadded_num_instance_variables {
+    if instance.len() != *unpadded_num_instance_variables {
         return Err(AuroraError::IncorrectInstanceLength {
             received: instance.len(),
-            expected: aurora_r1cs.unpadded_num_instance_variables,
+            expected: *unpadded_num_instance_variables,
         });
     }
 
@@ -84,33 +96,55 @@ where
     let mut instance = instance;
     instance.resize(num_instance_variables, F::ZERO);
 
+    // ======================== Naysay the proof ========================
+
     // Absorb the first 5 commitments
-    sponge.absorb(&com.iter().take(5).collect::<Vec<_>>());
+    sponge.absorb(&large_coms.iter().take(5).collect::<Vec<_>>());
 
     let r: F = sponge.squeeze_field_elements(1)[0];
 
-    // ======================== Verify the proof ========================
-
     // Absorb the missing commitments to g1, g2
-    sponge.absorb(&com.iter().skip(5).collect::<Vec<_>>());
+    sponge.absorb(&large_coms.last().unwrap());
+    sponge.absorb(&com_g_2);
 
     let a_point: F = sponge.squeeze_field_elements(1)[0];
 
-    // TODO Return non-assertion error
-    let pcs_naysay = NS::naysay(vk, &com, &a_point, evals.clone(), &proof, sponge, None).unwrap();
+    let pcs_naysay_large = NS::naysay(
+        vk_large,
+        &large_coms,
+        &a_point,
+        large_evals.clone(),
+        &large_opening_proof,
+        sponge,
+        None,
+    ).unwrap();
 
-    if let Some(pcs_naysayer_proof) = pcs_naysay {
-        return Ok(Some(AuroraNaysayerProof::PCS(pcs_naysayer_proof)));
+    let g_2_naysay = NS::naysay(
+        vk_small,
+        &[com_g_2],
+        &a_point,
+        vec![g_2_a],
+        &g_2_opening_proof,
+        sponge,
+        None,
+    ).unwrap();
+
+    if let Some(pcs_naysayer_proof) = pcs_naysay_large {
+        return Ok(Some(AuroraNaysayerProof::PCSLarge(pcs_naysayer_proof)));
+    }
+
+    if let Some(g_2_naysayer_proof) = g_2_naysay {
+        return Ok(Some(AuroraNaysayerProof::PCSG2(g_2_naysayer_proof)));
     }
 
     // ======================== Zero test ========================
 
     // Evaluations of the committed polynomials at a_point
     // TODO Return non-assertion error
-    let [f_a_a, f_b_a, f_c_a, f_0_a, f_w_a, g_1_a, g_2_a] = evals[..] else {
+    let [f_a_a, f_b_a, f_c_a, f_0_a, f_w_a, g_1_a] = large_evals[..] else {
         return Err(AuroraError::IncorrectNumberOfEvaluations {
-            received: evals.len(),
-            expected: 7,
+            received: large_evals.len(),
+            expected: 6,
         });
     };
 
@@ -174,27 +208,39 @@ where
 /// - Err if another type of error occurs during verification of the
 ///   naysayer proof.
 fn aurora_verify_naysay<'a, F, NS>(
-    vk: &NS::VerifierKey,
-    aurora_r1cs: &AuroraR1CS<F>,
+    vk: &AuroraVerifierKey<F, NS>,
     original_proof: &AuroraProof<F, NS>,
     naysayer_proof: &AuroraNaysayerProof<F, NS>,
     instance: Vec<F>,
     sponge: &mut impl CryptographicSponge,
-) -> Result<bool, AuroraError<F, NS>> 
+) -> Result<bool, AuroraError<F, NS>>
 where
     F: PrimeField + Absorb,
     NS: PCSNaysayer<F, DensePolynomial<F>>,
 {
-    let r1cs = aurora_r1cs.r1cs();
+    let AuroraVerifierKey {
+        r1cs:
+            AuroraR1CS {
+                r1cs,
+                ..
+            },
+        vk_large,
+        vk_small,
+    } = vk;
+
+
     let matrices = r1cs.to_matrices().unwrap();
 
     // 0. Initialising sponge with public parameters
-    absorb_public_parameters::<F, NS>(vk, &matrices, sponge);
+    absorb_public_parameters::<F, NS>((&vk_large, &vk_small), &matrices, sponge);
 
     let AuroraProof {
-        commitments: com,
-        proof,
-        evals,
+        large_coms,
+        com_g_2,
+        large_opening_proof,
+        g_2_opening_proof,
+        large_evals,
+        g_2_a,
     } = original_proof;
 
     let ConstraintMatrices {
@@ -211,27 +257,39 @@ where
     let mut instance = instance;
     instance.resize(num_instance_variables, F::ZERO);
 
+    // =================== Naysayer proof for the PCS ===================
+
     // Absorb the first 5 commitments
-    sponge.absorb(&com.iter().take(5).collect::<Vec<_>>());
+    sponge.absorb(&large_coms.iter().take(5).collect::<Vec<_>>());
 
     let r: F = sponge.squeeze_field_elements(1)[0];
 
-    // ======================== Verify the PCS proof ========================
-
     // Absorb the missing commitments to g1, g2
-    sponge.absorb(&com.iter().skip(5).collect::<Vec<_>>());
+    sponge.absorb(&large_coms.last().unwrap());
+    sponge.absorb(&com_g_2);
 
     let a_point: F = sponge.squeeze_field_elements(1)[0];
 
     // TODO review code structure and decide whether it is better to
     // transform this match into a list of sequential ifs,
     match naysayer_proof {
-        AuroraNaysayerProof::PCS(pcs_naysayer_proof) => Ok(NS::verify_naysay(
-            vk,
-            com,
+        AuroraNaysayerProof::PCSLarge(pcs_naysayer_proof) => Ok(NS::verify_naysay(
+            vk_large,
+            large_coms,
             &a_point,
-            evals.clone(),
-            proof,
+            large_evals.clone(),
+            large_opening_proof,
+            pcs_naysayer_proof,
+            sponge,
+            None,
+        )
+        .unwrap()),
+        AuroraNaysayerProof::PCSG2(pcs_naysayer_proof) => Ok(NS::verify_naysay(
+            vk_small,
+            &[com_g_2.clone()],
+            &a_point,
+            vec![g_2_a.clone()],
+            g_2_opening_proof,
             pcs_naysayer_proof,
             sponge,
             None,
@@ -242,10 +300,10 @@ where
 
             // Evaluations of the committed polynomials at a_point
             // TODO Return non-assertion error
-            let [f_a_a, f_b_a, f_c_a, f_0_a, f_w_a, g_1_a, g_2_a] = evals[..] else {
+            let [f_a_a, f_b_a, f_c_a, f_0_a, f_w_a, g_1_a] = large_evals[..] else {
                 return Err(AuroraError::IncorrectNumberOfEvaluations {
-                    received: evals.len(),
-                    expected: 7,
+                    received: large_evals.len(),
+                    expected: 6,
                 });
             };
 
@@ -298,7 +356,7 @@ where
                         + (p_r_a * f_b_a - q_br_a * f_z_a) * r_pow_n
                         + (p_r_a * f_c_a - q_cr_a * f_z_a) * (r_pow_n * r_pow_n);
 
-                    return Ok(u_a != g_1_a * v_h_a + g_2_a * a_point);
+                    return Ok(u_a != g_1_a * v_h_a + *g_2_a * a_point);
                 }
                 _ => unreachable!(),
             }

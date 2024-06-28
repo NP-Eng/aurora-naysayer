@@ -1,16 +1,17 @@
-
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, Absorb, CryptographicSponge};
 use ark_ff::{Field, PrimeField};
-use ark_poly::{univariate::{DensePolynomial, SparsePolynomial}, DenseUVPolynomial};
-use ark_poly_commit::{test_sponge, PolynomialCommitment, TestUVLigero};
+use ark_poly::{
+    univariate::DensePolynomial,
+    DenseUVPolynomial, Polynomial,
+};
+use ark_poly_commit::{test_sponge, PolynomialCommitment, TestUVLigero, linear_codes::LinCodeParametersInfo};
 use ark_std::test_rng;
 
-use crate::{
-    aurora::*, naysayer::*, reader::read_constraint_system, TEST_DATA_PATH
-};
+use crate::{aurora::*, naysayer::*, reader::read_constraint_system, TEST_DATA_PATH};
 
-trait FuzzablePolynomialCommitment<F: PrimeField + Absorb>: PolynomialCommitment<F, DensePolynomial<F>>
+trait FuzzablePolynomialCommitment<F: PrimeField + Absorb>:
+    PolynomialCommitment<F, DensePolynomial<F>>
 {
     fn fuzz_proof(proof: &mut Self::Proof);
 }
@@ -25,7 +26,7 @@ impl<F: PrimeField + Absorb> FuzzablePolynomialCommitment<F> for TestUVLigero<F>
 enum AuroraDishonesty {
     // No dishonesty: same algorihm as AuroraR1CS::prove
     None,
-    // Tamper with the i-th evaluation sent. Recall the order: 
+    // Tamper with the i-th evaluation sent. Recall the order:
     // [f_a(a) f_b(a), f_c(a), f_0(a), f_w(a), g_1(a), g_2(a)]
     Evaluation(usize),
     // Fuzz the PCS opening proof
@@ -46,15 +47,15 @@ enum AuroraDishonesty {
     // Tamper with f_a after absorbing the commitment.
     // This causes the prover and verifier sponges to desynchronise, which in
     // turn breaks the zero test at the squeezed point a
-    FAPostAbsorb
+    FAPostAbsorb,
 }
 
 fn dishonest_aurora_prove<F, PCS>(
-    padded_aurora_r1cs: &AuroraR1CS<F>,
+    pk: &AuroraProverKey<F, PCS>,
     instance: Vec<F>,
     witness: Vec<F>,
-    ck: &PCS::CommitterKey,
-    vk: &PCS::VerifierKey,
+    // In the future, consider whether this should nestead be PCS::UniversalParams
+    pcs_vks: (&PCS::VerifierKey, &PCS::VerifierKey),
     sponge: &mut impl CryptographicSponge,
     dishonesty: AuroraDishonesty,
 ) -> AuroraProof<F, PCS>
@@ -63,11 +64,20 @@ where
     PCS: FuzzablePolynomialCommitment<F>,
 {
 
-    let r1cs = padded_aurora_r1cs.r1cs();
+    let AuroraProverKey {
+        r1cs:
+            AuroraR1CS {
+                r1cs,
+                ..
+            },
+        ck_large,
+        ck_small,
+    } = pk;
+
     let matrices = r1cs.to_matrices().unwrap();
 
     // 0. Initialising sponge with public parameters
-    absorb_public_parameters::<F, PCS>(&vk, &matrices, sponge);
+    absorb_public_parameters::<F, PCS>(pcs_vks, &matrices, sponge);
 
     let ConstraintMatrices {
         a,
@@ -85,9 +95,9 @@ where
     // 1. Constructing committed polynomials
     // Following the notation of the paper
     let h = GeneralEvaluationDomain::new(n).unwrap();
-    
+
     let mut witness = witness;
-    
+
     if dishonesty == AuroraDishonesty::Witness {
         witness[0] += F::ONE;
     }
@@ -152,13 +162,13 @@ where
         ("f_w", &f_w),
     ]);
 
-    let (com_1, com_states_1) = PCS::commit(ck, &labeled_polynomials_1, None).unwrap();
+    let (com_1, com_states_1) = PCS::commit(ck_large, &labeled_polynomials_1, None).unwrap();
 
     sponge.absorb(&com_1);
 
     // ======================== Computation of g_1, g_2 ========================
 
-    if dishonesty == AuroraDishonesty::FAPostAbsorb  {
+    if dishonesty == AuroraDishonesty::FAPostAbsorb {
         f_a.coeffs[0] += F::ONE;
     }
 
@@ -179,21 +189,10 @@ where
         + &(&(&p_r * &f_b) - &(&q_br * &f_z)) * r_pow_n
         + &(&(&p_r * &f_c) - &(&q_cr * &f_z)) * (r_pow_n * r_pow_n);
 
-    // We construct g_1 and g_2 such that u = v_h * g_1 + x * g_2
-
-    // Auxiliary polynomials x and x^n - 1
-    let x = DensePolynomial::from(SparsePolynomial::from_coefficients_slice(&[(1, F::ONE)]));
-
-    let x_n_minus_1 = DensePolynomial::from(SparsePolynomial::from_coefficients_slice(&[(
-        n - 1,
-        F::ONE,
-    )]));
-
-    let dividend = &x_n_minus_1 * &u;
-
-    let (quotient, mut g_2) = dividend.divide_by_vanishing_poly(h).unwrap();
-
-    let mut g_1 = &(&quotient * &x) - &u;
+    // We construct g_1 and g_2 such that u = v_h * g_1 + x * g_2 and with
+    // prescribed degree bounds
+    let (mut g_1, remainder) = u.divide_by_vanishing_poly(h).unwrap();
+    let mut g_2 = &remainder / &monomial(1);
 
     match dishonesty {
         AuroraDishonesty::G1 => g_1.coeffs[0] += F::ONE,
@@ -201,50 +200,71 @@ where
         _ => {}
     };
 
-    //==================== Committing to g_1, g_2 ====================
+    //==================== Committing to g_1 and g_2 ====================
 
-    let labeled_polynomials_2 = label_polynomials(&[("g_1", &g_1), ("g_2", &g_2)]);
+    let labeled_g_1 = label_polynomials(&[("g_1", &g_1)]);
+    let labeled_g_2 = label_polynomials(&[("g_2", &g_2)]);
 
-    let (com_2, com_states_2) = PCS::commit(ck, &labeled_polynomials_2, None).unwrap();
+    // ck_large, ck_small enforce the degree bound <= n - 1 and <= n - 2 for
+    // g_1 and g_2, respectively
+    let (com_g_1, g_1_com_state) = PCS::commit(&ck_large, &labeled_g_1, None).unwrap();
+    let (mut com_g_2, g_2_com_state) = PCS::commit(&ck_small, &labeled_g_2, None).unwrap();
 
-    sponge.absorb(&com_2);
+    sponge.absorb(&com_g_1);
+    sponge.absorb(&com_g_2);
 
-    let coms = [com_1, com_2].concat();
-    let com_states = [com_states_1, com_states_2].concat();
-    let labeled_polynomials = [labeled_polynomials_1, labeled_polynomials_2].concat();
+    let large_coms = [com_1, com_g_1].concat();
+    let large_com_states = [com_states_1, g_1_com_state].concat();
+    let large_labeled_polynomials = [labeled_polynomials_1, labeled_g_1].concat();
 
     //======================== PCS proof ========================
 
     let a_point: F = sponge.squeeze_field_elements(1)[0];
 
-    let mut proof = PCS::open(
-        ck,
-        &labeled_polynomials,
-        &coms,
+    let mut large_opening_proof = PCS::open(
+        &ck_large,
+        &large_labeled_polynomials,
+        &large_coms,
         &a_point,
         sponge,
-        &com_states,
+        &large_com_states,
         None,
     )
     .unwrap();
 
     if dishonesty == AuroraDishonesty::OpeningProof {
-        PCS::fuzz_proof(&mut proof);
+        PCS::fuzz_proof(&mut large_opening_proof);
     }
 
-    let mut evals: Vec<F> = labeled_polynomials
+    let g_2_opening_proof = PCS::open(
+        &ck_small,
+        &labeled_g_2,
+        &com_g_2,
+        &a_point,
+        sponge,
+        &g_2_com_state,
+        None,
+    )
+    .unwrap();
+
+    let mut large_evals: Vec<F> = large_labeled_polynomials
         .iter()
         .map(|lp| lp.evaluate(&a_point))
         .collect();
 
     if let AuroraDishonesty::Evaluation(i) = dishonesty {
-        evals[i] += F::ONE;
+        large_evals[i] += F::ONE;
     }
-    
+
+    // TODO mess with the eval of g_2
+
     AuroraProof {
-        commitments: coms,
-        proof,
-        evals,
+        large_coms,
+        com_g_2: com_g_2.remove(0),
+        large_opening_proof,
+        g_2_opening_proof,
+        large_evals,
+        g_2_a: g_2.evaluate(&a_point),
     }
 }
 
@@ -270,81 +290,53 @@ fn test_aurora_naysay() {
 
     let sponge: PoseidonSponge<Fr> = test_sponge();
 
-    let (aurora_r1cs, ck, vk) =
-        AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
+    let (mut pk, mut vk) = AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
 
-    let test_aurora_naysay_with = |dishonesty: AuroraDishonesty, expected_naysayer_proof: Option<AuroraNaysayerProof<Fr, TestUVLigero<Fr>>>| {
-        let aurora_proof = dishonest_aurora_prove(
-            &aurora_r1cs,
-            instance.clone(),
-            witness.clone(),
-            &ck,
-            &vk,
-            &mut sponge.clone(),
-            dishonesty,
-        );
+    pk.ck_large.set_well_formedness(false);
+    pk.ck_small.set_well_formedness(false);
+    vk.vk_large.set_well_formedness(false);
+    vk.vk_small.set_well_formedness(false);
 
-        let naysayer_proof = aurora_naysay::<Fr, TestUVLigero<Fr>>(
-            &aurora_r1cs,
-            &vk,
-            aurora_proof.clone(),
-            instance.clone(),
-            &mut sponge.clone(),
-        )
-        .unwrap();
-            
-        assert_eq!(naysayer_proof, expected_naysayer_proof);
+    let test_aurora_naysay_with =
+        |dishonesty: AuroraDishonesty,
+         expected_naysayer_proof: Option<AuroraNaysayerProof<Fr, TestUVLigero<Fr>>>| {
+            let aurora_proof = dishonest_aurora_prove(
+                &pk,
+                instance.clone(),
+                witness.clone(),
+                (&vk.vk_large, &vk.vk_small),
+                &mut sponge.clone(),
+                dishonesty,
+            );
 
-        assert_eq!(
-            aurora_verify_naysay::<Fr, TestUVLigero<Fr>>(
+            let naysayer_proof = aurora_naysay::<Fr, TestUVLigero<Fr>>(
                 &vk,
-                &aurora_r1cs,
-                &aurora_proof,
-                &naysayer_proof.unwrap(),
+                aurora_proof.clone(),
                 instance.clone(),
                 &mut sponge.clone(),
             )
-            .is_ok(),
-            dishonesty == AuroraDishonesty::None
-        );
-    };
-    
-    let aurora_proof = aurora_r1cs
-        .prove::<TestUVLigero<Fr>>(
-            instance.clone(),
-            witness.clone(),
-            &ck,
-            &vk,
-            &mut sponge.clone(),
-        )
-        .unwrap();
+            .unwrap();
 
-    assert!(aurora_r1cs
-        .verify::<TestUVLigero<Fr>>(&vk, instance.clone(), aurora_proof.clone(), &mut sponge.clone())
-        .unwrap());
+            assert_eq!(naysayer_proof, expected_naysayer_proof);
 
-    let naysayer_proof = aurora_naysay::<Fr, TestUVLigero<Fr>>(
-        &aurora_r1cs,
-        &vk,
-        aurora_proof.clone(),
-        instance.clone(),   
-        &mut sponge.clone(),
-    ).unwrap();
-
-    assert!(aurora_verify_naysay::<Fr, TestUVLigero<Fr>>(
-        &vk,
-        &aurora_r1cs,
-        &aurora_proof,
-        &naysayer_proof.unwrap(),
-        instance.clone(),
-        &mut sponge.clone(),
-    ).unwrap());
+            if dishonesty != AuroraDishonesty::None {
+                assert!(aurora_verify_naysay::<Fr, TestUVLigero<Fr>>(
+                    &vk,
+                    &aurora_proof,
+                    &naysayer_proof.unwrap(),
+                    instance.clone(),
+                    &mut sponge.clone(),
+                ).unwrap()); 
+            }
+        };
 
     /***************** Case 1 *****************/
     // Honest proof verifies and is not naysaid
     test_aurora_naysay_with(AuroraDishonesty::None, None);
-    
+
     /***************** Case 2 *****************/
+    test_aurora_naysay_with(AuroraDishonesty::FA, Some(AuroraNaysayerProof::ZeroCheck));
+    
     // // (i, x): Set the i-th value in the evaluation vector to x Recall the order
     // // [f_a(a) f_b(a), f_c(a), f_0(a), f_w(a), g_1(a), g_2(a)]
     // Evaluation(usize, F),
@@ -367,4 +359,5 @@ fn test_aurora_naysay() {
     // // This causes the prover and verifier sponges to desynchronise, which in
     // // turn breaks the zero test at the squeezed point a
     // FAPostAbsorb
+    
 }
