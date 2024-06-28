@@ -1,11 +1,10 @@
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, Absorb, CryptographicSponge};
 use ark_ff::{Field, PrimeField};
-use ark_poly::{
-    univariate::DensePolynomial,
-    DenseUVPolynomial, Polynomial,
+use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial};
+use ark_poly_commit::{
+    linear_codes::LinCodeParametersInfo, test_sponge, PolynomialCommitment, TestUVLigero,
 };
-use ark_poly_commit::{test_sponge, PolynomialCommitment, TestUVLigero, linear_codes::LinCodeParametersInfo};
 use ark_std::test_rng;
 
 use crate::{aurora::*, naysayer::*, reader::read_constraint_system, TEST_DATA_PATH};
@@ -63,13 +62,8 @@ where
     F: PrimeField + Absorb,
     PCS: FuzzablePolynomialCommitment<F>,
 {
-
     let AuroraProverKey {
-        r1cs:
-            AuroraR1CS {
-                r1cs,
-                ..
-            },
+        r1cs: AuroraR1CS { r1cs, .. },
         ck_large,
         ck_small,
     } = pk;
@@ -326,7 +320,8 @@ fn test_aurora_naysay() {
                     &naysayer_proof.unwrap(),
                     instance.clone(),
                     &mut sponge.clone(),
-                ).unwrap()); 
+                )
+                .unwrap());
             }
         };
 
@@ -336,7 +331,7 @@ fn test_aurora_naysay() {
 
     /***************** Case 2 *****************/
     test_aurora_naysay_with(AuroraDishonesty::FA, Some(AuroraNaysayerProof::ZeroCheck));
-    
+
     // // (i, x): Set the i-th value in the evaluation vector to x Recall the order
     // // [f_a(a) f_b(a), f_c(a), f_0(a), f_w(a), g_1(a), g_2(a)]
     // Evaluation(usize, F),
@@ -359,5 +354,4 @@ fn test_aurora_naysay() {
     // // This causes the prover and verifier sponges to desynchronise, which in
     // // turn breaks the zero test at the squeezed point a
     // FAPostAbsorb
-    
 }

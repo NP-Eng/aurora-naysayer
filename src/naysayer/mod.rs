@@ -46,11 +46,10 @@ where
     NS: PCSNaysayer<F, DensePolynomial<F>>,
 {
     let AuroraVerifierKey {
-        r1cs:
-            AuroraR1CS {
-                r1cs,
-                unpadded_num_instance_variables,
-            },
+        r1cs: AuroraR1CS {
+            r1cs,
+            unpadded_num_instance_variables,
+        },
         vk_large,
         vk_small,
     } = vk;
@@ -117,7 +116,8 @@ where
         &large_opening_proof,
         sponge,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     let g_2_naysay = NS::naysay(
         vk_small,
@@ -127,7 +127,8 @@ where
         &g_2_opening_proof,
         sponge,
         None,
-    ).unwrap();
+    )
+    .unwrap();
 
     if let Some(pcs_naysayer_proof) = pcs_naysay_large {
         return Ok(Some(AuroraNaysayerProof::PCSLarge(pcs_naysayer_proof)));
@@ -219,15 +220,10 @@ where
     NS: PCSNaysayer<F, DensePolynomial<F>>,
 {
     let AuroraVerifierKey {
-        r1cs:
-            AuroraR1CS {
-                r1cs,
-                ..
-            },
+        r1cs: AuroraR1CS { r1cs, .. },
         vk_large,
         vk_small,
     } = vk;
-
 
     let matrices = r1cs.to_matrices().unwrap();
 

@@ -3,7 +3,7 @@ use crate::{aurora::pad_r1cs, reader::read_constraint_system, TEST_DATA_PATH};
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_ff::{Field, PrimeField};
-use ark_poly_commit::{test_sponge, TestUVLigero, linear_codes::LinCodeParametersInfo};
+use ark_poly_commit::{linear_codes::LinCodeParametersInfo, test_sponge, TestUVLigero};
 use ark_std::{test_rng, vec};
 
 fn to_sparse<F: PrimeField + From<i64>>(matrix: &Vec<Vec<i64>>) -> Vec<Vec<(F, usize)>> {
