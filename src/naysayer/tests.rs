@@ -47,6 +47,7 @@ enum AuroraDishonesty {
     // This causes the prover and verifier sponges to desynchronise, which in
     // turn breaks the zero test at the squeezed point a
     FAPostAbsorb,
+    G2PostAbsorb,
 }
 
 fn dishonest_aurora_prove<F, PCS>(
@@ -211,6 +212,10 @@ where
     let large_com_states = [com_states_1, g_1_com_state].concat();
     let large_labeled_polynomials = [labeled_polynomials_1, labeled_g_1].concat();
 
+    if dishonesty == AuroraDishonesty::G2PostAbsorb {
+        f_a.coeffs[0] += F::ONE;
+    }
+
     //======================== PCS proof ========================
 
     let a_point: F = sponge.squeeze_field_elements(1)[0];
@@ -327,13 +332,27 @@ fn test_aurora_naysay() {
 
     /***************** Case 1 *****************/
     // Honest proof verifies and is not naysaid
-    test_aurora_naysay_with(AuroraDishonesty::None, None);
+    test_aurora_naysay_with(AuroraDishonesty::None, Some(AuroraNaysayerProof::None));
 
     /***************** Case 2 *****************/
     test_aurora_naysay_with(AuroraDishonesty::FA, Some(AuroraNaysayerProof::ZeroCheck));
     test_aurora_naysay_with(AuroraDishonesty::FB, Some(AuroraNaysayerProof::ZeroCheck));
     test_aurora_naysay_with(AuroraDishonesty::FC, Some(AuroraNaysayerProof::ZeroCheck));
     test_aurora_naysay_with(AuroraDishonesty::F0, Some(AuroraNaysayerProof::ZeroCheck));
+
+    /***************** Case 3 *****************/
+    test_aurora_naysay_with(
+        AuroraDishonesty::FW,
+        Some(AuroraNaysayerProof::UnivariateSumcheck),
+    );
+    test_aurora_naysay_with(
+        AuroraDishonesty::G1,
+        Some(AuroraNaysayerProof::UnivariateSumcheck),
+    );
+    test_aurora_naysay_with(
+        AuroraDishonesty::G2,
+        Some(AuroraNaysayerProof::UnivariateSumcheck),
+    );
 
     // // (i, x): Set the i-th value in the evaluation vector to x Recall the order
     // // [f_a(a) f_b(a), f_c(a), f_0(a), f_w(a), g_1(a), g_2(a)]
