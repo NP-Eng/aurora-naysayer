@@ -331,6 +331,9 @@ fn test_aurora_naysay() {
 
     /***************** Case 2 *****************/
     test_aurora_naysay_with(AuroraDishonesty::FA, Some(AuroraNaysayerProof::ZeroCheck));
+    test_aurora_naysay_with(AuroraDishonesty::FB, Some(AuroraNaysayerProof::ZeroCheck));
+    test_aurora_naysay_with(AuroraDishonesty::FC, Some(AuroraNaysayerProof::ZeroCheck));
+    test_aurora_naysay_with(AuroraDishonesty::F0, Some(AuroraNaysayerProof::ZeroCheck));
 
     // // (i, x): Set the i-th value in the evaluation vector to x Recall the order
     // // [f_a(a) f_b(a), f_c(a), f_0(a), f_w(a), g_1(a), g_2(a)]
