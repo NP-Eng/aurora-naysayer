@@ -61,9 +61,9 @@ where
     pub(crate) r1cs: AuroraR1CS<F>,
     // Committer PCS key enforcing the degree bound <= n - 1, where
     // n is the number of columns of the (padded) R1CS
-    pub(crate) ck_large: PCS::CommitterKey,
+    pub ck_large: PCS::CommitterKey,
     // Committer PCS key enforcing the degree bound <= n - 2
-    pub(crate) ck_small: PCS::CommitterKey,
+    pub ck_small: PCS::CommitterKey,
 }
 
 // Aurora verifier key, containing the R1CS and PCS keys to  verify
@@ -76,9 +76,9 @@ where
     pub(crate) r1cs: AuroraR1CS<F>,
     // Verifier PCS key enforcing the degree bound <= n - 1, where n is the
     // number of columns of the (padded) R1CS
-    pub(crate) vk_large: PCS::VerifierKey,
+    pub vk_large: PCS::VerifierKey,
     // CVerifier PCS key enforcing the degree bound <= n - 2
-    pub(crate) vk_small: PCS::VerifierKey,
+    pub vk_small: PCS::VerifierKey,
 }
 
 impl<F> AuroraR1CS<F>

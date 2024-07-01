@@ -10,8 +10,8 @@ use crate::{
     AuroraR1CS,
 };
 
-#[cfg(test)]
-mod tests;
+#[cfg(any(test, feature = "bench"))]
+pub mod tests;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""), PartialEq(bound = ""))]
@@ -35,7 +35,7 @@ pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePol
 // we have the comprehensive non-assertion-error-handling implementation, in
 // which case non-assertion-errors will be one more case of the naysayer proof
 // and the return type here will be Option<AuroraNaysayerProof>
-fn aurora_naysay<F, NS>(
+pub fn aurora_naysay<F, NS>(
     vk: &AuroraVerifierKey<F, NS>,
     aurora_proof: AuroraProof<F, NS>,
     instance: Vec<F>,
@@ -208,7 +208,7 @@ where
 ///   proof points to a non-issue
 /// - Err if another type of error occurs during verification of the
 ///   naysayer proof.
-fn aurora_verify_naysay<'a, F, NS>(
+pub fn aurora_verify_naysay<'a, F, NS>(
     vk: &AuroraVerifierKey<F, NS>,
     original_proof: &AuroraProof<F, NS>,
     naysayer_proof: &AuroraNaysayerProof<F, NS>,

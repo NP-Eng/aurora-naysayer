@@ -1,3 +1,4 @@
+#[cfg(test)]
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::{poseidon::PoseidonSponge, Absorb, CryptographicSponge};
 use ark_ff::{Field, PrimeField};
@@ -11,7 +12,7 @@ use ark_std::test_rng;
 
 use crate::{aurora::*, naysayer::*, reader::read_constraint_system, TEST_DATA_PATH};
 
-trait FuzzablePolynomialCommitment<F: PrimeField + Absorb>:
+pub trait FuzzablePolynomialCommitment<F: PrimeField + Absorb>:
     PolynomialCommitment<F, DensePolynomial<F>>
 {
     fn fuzz_proof(proof: &mut Self::Proof);
@@ -24,7 +25,7 @@ impl<F: PrimeField + Absorb> FuzzablePolynomialCommitment<F> for TestUVLigero<F>
 }
 
 #[derive(PartialEq, Clone, Copy)]
-enum AuroraDishonesty {
+pub enum AuroraDishonesty {
     // No dishonesty: same algorihm as AuroraR1CS::prove
     None,
     // Tamper with the i-th evaluation sent. Recall the order:
@@ -52,7 +53,7 @@ enum AuroraDishonesty {
     G2PostAbsorb,
 }
 
-fn dishonest_aurora_prove<F, PCS>(
+pub fn dishonest_aurora_prove<F, PCS>(
     pk: &AuroraProverKey<F, PCS>,
     instance: Vec<F>,
     witness: Vec<F>,
