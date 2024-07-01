@@ -194,11 +194,6 @@ fn test_prove() {
     vk.vk_large.set_well_formedness(false);
     vk.vk_small.set_well_formedness(false);
 
-    // pk: &AuroraProverKey<F, PCS>,
-    // instance: Vec<F>,
-    // witness: Vec<F>,
-    // pcs_vks: (&PCS::VerifierKey, &PCS::VerifierKey),
-    // sponge: &mut impl CryptographicSponge)
     let aurora_proof = AuroraR1CS::prove::<TestUVLigero<Fr>>(
         &pk,
         instance.clone(),
