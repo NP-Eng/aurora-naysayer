@@ -5,6 +5,8 @@ use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial};
 use ark_poly_commit::{
     linear_codes::LinCodeParametersInfo, test_sponge, PolynomialCommitment, TestUVLigero,
 };
+use ark_poly_naysayer::linear_codes::{LinearCodeNaysayerProof, LinearCodeNaysayerProofSingle};
+
 use ark_std::test_rng;
 
 use crate::{aurora::*, naysayer::*, reader::read_constraint_system, TEST_DATA_PATH};
@@ -149,7 +151,7 @@ where
 
     // ================== Committing to f_a, f_b, f_c, f_0, f_w ==================
 
-    let labeled_polynomials_1 = label_polynomials(&[
+    let mut labeled_polynomials_1 = label_polynomials(&[
         ("f_a", &f_a),
         ("f_b", &f_b),
         ("f_c", &f_c),
@@ -165,6 +167,13 @@ where
 
     if dishonesty == AuroraDishonesty::FAPostAbsorb {
         f_a.coeffs[0] += F::ONE;
+        labeled_polynomials_1 = label_polynomials(&[
+            ("f_a", &f_a),
+            ("f_b", &f_b),
+            ("f_c", &f_c),
+            ("f_0", &f_0),
+            ("f_w", &f_w),
+        ]);
     }
 
     // Randomising polinomial through a squeezed challenge
@@ -198,7 +207,7 @@ where
     //==================== Committing to g_1 and g_2 ====================
 
     let labeled_g_1 = label_polynomials(&[("g_1", &g_1)]);
-    let labeled_g_2 = label_polynomials(&[("g_2", &g_2)]);
+    let mut labeled_g_2 = label_polynomials(&[("g_2", &g_2)]);
 
     // ck_large, ck_small enforce the degree bound <= n - 1 and <= n - 2 for
     // g_1 and g_2, respectively
@@ -213,7 +222,8 @@ where
     let large_labeled_polynomials = [labeled_polynomials_1, labeled_g_1].concat();
 
     if dishonesty == AuroraDishonesty::G2PostAbsorb {
-        f_a.coeffs[0] += F::ONE;
+        g_2.coeffs[0] += F::ONE;
+        labeled_g_2 = label_polynomials(&[("g_2", &g_2)]);
     }
 
     //======================== PCS proof ========================
@@ -250,12 +260,15 @@ where
         .iter()
         .map(|lp| lp.evaluate(&a_point))
         .collect();
+    let mut g_2_a = g_2.evaluate(&a_point);
 
     if let AuroraDishonesty::Evaluation(i) = dishonesty {
-        large_evals[i] += F::ONE;
+        if i < large_evals.len() {
+            large_evals[i] += F::ONE;
+        } else {
+            g_2_a += F::ONE;
+        }
     }
-
-    // TODO mess with the eval of g_2
 
     AuroraProof {
         large_coms,
@@ -263,7 +276,7 @@ where
         large_opening_proof,
         g_2_opening_proof,
         large_evals,
-        g_2_a: g_2.evaluate(&a_point),
+        g_2_a,
     }
 }
 
@@ -316,7 +329,25 @@ fn test_aurora_naysay() {
             )
             .unwrap();
 
-            assert_eq!(naysayer_proof, expected_naysayer_proof);
+            println!("{:?}", naysayer_proof);
+
+            let naysayer_proof_matches = naysayer_proof == expected_naysayer_proof || {
+                if matches!(naysayer_proof, Some(AuroraNaysayerProof::PCSLarge { .. })) {
+                    matches!(
+                        expected_naysayer_proof,
+                        Some(AuroraNaysayerProof::PCSLarge { .. })
+                    )
+                } else if matches!(naysayer_proof, Some(AuroraNaysayerProof::PCSG2 { .. })) {
+                    matches!(
+                        expected_naysayer_proof,
+                        Some(AuroraNaysayerProof::PCSG2 { .. })
+                    )
+                } else {
+                    false
+                }
+            };
+
+            assert!(naysayer_proof_matches);
 
             if dishonesty != AuroraDishonesty::None {
                 assert!(aurora_verify_naysay::<Fr, TestUVLigero<Fr>>(
@@ -332,15 +363,19 @@ fn test_aurora_naysay() {
 
     /***************** Case 1 *****************/
     // Honest proof verifies and is not naysaid
-    test_aurora_naysay_with(AuroraDishonesty::None, Some(AuroraNaysayerProof::None));
+    test_aurora_naysay_with(AuroraDishonesty::None, None);
 
     /***************** Case 2 *****************/
+    // Tamper with the polynomials f_a, f_b, f_c, f_0 before committing. The zero test fails
+    // (f_a * f_b - f_c = f_0 * v_h)
     test_aurora_naysay_with(AuroraDishonesty::FA, Some(AuroraNaysayerProof::ZeroCheck));
     test_aurora_naysay_with(AuroraDishonesty::FB, Some(AuroraNaysayerProof::ZeroCheck));
     test_aurora_naysay_with(AuroraDishonesty::FC, Some(AuroraNaysayerProof::ZeroCheck));
     test_aurora_naysay_with(AuroraDishonesty::F0, Some(AuroraNaysayerProof::ZeroCheck));
 
     /***************** Case 3 *****************/
+    // Tamper with the polynomials f_w, g_1, g_2 before committing. The univariate sumcheck fails
+    // (u = v_h * g_1 + x * g_2, where u depends on f_w)
     test_aurora_naysay_with(
         AuroraDishonesty::FW,
         Some(AuroraNaysayerProof::UnivariateSumcheck),
@@ -354,26 +389,41 @@ fn test_aurora_naysay() {
         Some(AuroraNaysayerProof::UnivariateSumcheck),
     );
 
-    // // (i, x): Set the i-th value in the evaluation vector to x Recall the order
-    // // [f_a(a) f_b(a), f_c(a), f_0(a), f_w(a), g_1(a), g_2(a)]
-    // Evaluation(usize, F),
-    // // Fuzz the PCS opening proof
-    // OpeningProof,
-    // // Tamper with the witness
-    // // This will break the zero test in most situations
-    // Witness,
-    // // Tamper with the polynomials before committing
-    // //      These break the zero test
-    // FA,
-    // FB,
-    // FC,
-    // F0,
-    // //      These break the unviariate sumcheck
-    // FW,
-    // G1,
-    // G2,
-    // // Tamper with f_a after absorbing the commitment.
-    // // This causes the prover and verifier sponges to desynchronise, which in
-    // // turn breaks the zero test at the squeezed point a
-    // FAPostAbsorb
+    /***************** Case 4 *****************/
+    // Tamper with f_a and g_2 after absorbing the commitment. The PCS opening proof fails
+    // We use an arbitrary PCS naysayer proof for this test, note that we are not testing the PCS
+    // naysayer proof itself
+    let dummy_pcs_naysayer_proof = LinearCodeNaysayerProof {
+        incorrect_proof_index: 0,
+        naysayer_proof_single: LinearCodeNaysayerProofSingle::EvaluationAssertion,
+    };
+
+    test_aurora_naysay_with(
+        AuroraDishonesty::FAPostAbsorb,
+        Some(AuroraNaysayerProof::PCSLarge(
+            dummy_pcs_naysayer_proof.clone(),
+        )),
+    );
+
+    /***************** Case 5 *****************/
+    // Tamper with g_2 after absorbing the commitment. The PCS opening proof fails
+    test_aurora_naysay_with(
+        AuroraDishonesty::G2PostAbsorb,
+        Some(AuroraNaysayerProof::PCSG2(dummy_pcs_naysayer_proof.clone())),
+    );
+
+    /***************** Case 6 *****************/
+    // Tamper with the evaluations sent to the naysayer. The PCS opening proofs fail
+    (0..6).for_each(|i| {
+        test_aurora_naysay_with(
+            AuroraDishonesty::Evaluation(i),
+            Some(AuroraNaysayerProof::PCSLarge(
+                dummy_pcs_naysayer_proof.clone(),
+            )),
+        );
+    });
+    test_aurora_naysay_with(
+        AuroraDishonesty::Evaluation(6),
+        Some(AuroraNaysayerProof::PCSG2(dummy_pcs_naysayer_proof)),
+    );
 }
