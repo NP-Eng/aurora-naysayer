@@ -8,15 +8,18 @@ use ark_poly::{
 };
 use ark_poly_commit::{LabeledCommitment, PolynomialCommitment};
 use ark_relations::r1cs::{ConstraintMatrices, ConstraintSystem};
+use derivative::Derivative;
 use error::AuroraError;
 use utils::*;
 
 #[cfg(test)]
 mod tests;
 
-mod error;
-mod utils;
+pub mod error;
+pub mod utils;
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct AuroraProof<F, PCS>
 where
     F: PrimeField,
@@ -25,18 +28,18 @@ where
     /// Commitments to f_a, f_b, f_c, f_0, f_w and g_1
     /// These should have an enforced degree bound <= n - 1, where n is the
     /// number of columns of the R1CS
-    large_coms: Vec<LabeledCommitment<PCS::Commitment>>,
+    pub(crate) large_coms: Vec<LabeledCommitment<PCS::Commitment>>,
     /// Commitment to g_2
     /// This should have an enforced degree bound <= n - 2
-    com_g_2: LabeledCommitment<PCS::Commitment>,
+    pub(crate) com_g_2: LabeledCommitment<PCS::Commitment>,
     /// Proofs of opening for the large commitments
-    large_opening_proof: PCS::Proof,
+    pub(crate) large_opening_proof: PCS::Proof,
     /// Proof of opening for the small commitment
-    g_2_opening_proof: PCS::Proof,
+    pub(crate) g_2_opening_proof: PCS::Proof,
     /// Values f_a(a), f_b(a), f_c(a), f_0(a), f_w(a), g_1(a)
-    large_evals: Vec<F>,
+    pub(crate) large_evals: Vec<F>,
     /// Value g_2(a)
-    g_2_a: F,
+    pub(crate) g_2_a: F,
 }
 
 #[derive(Clone)]
@@ -44,7 +47,7 @@ pub struct AuroraR1CS<F>
 where
     F: PrimeField + Absorb,
 {
-    r1cs: ConstraintSystem<F>,
+    pub(crate) r1cs: ConstraintSystem<F>,
     pub(crate) unpadded_num_instance_variables: usize,
 }
 
@@ -58,9 +61,9 @@ where
     pub(crate) r1cs: AuroraR1CS<F>,
     // Committer PCS key enforcing the degree bound <= n - 1, where
     // n is the number of columns of the (padded) R1CS
-    pub(crate) ck_large: PCS::CommitterKey,
+    pub ck_large: PCS::CommitterKey,
     // Committer PCS key enforcing the degree bound <= n - 2
-    pub(crate) ck_small: PCS::CommitterKey,
+    pub ck_small: PCS::CommitterKey,
 }
 
 // Aurora verifier key, containing the R1CS and PCS keys to  verify
@@ -73,9 +76,9 @@ where
     pub(crate) r1cs: AuroraR1CS<F>,
     // Verifier PCS key enforcing the degree bound <= n - 1, where n is the
     // number of columns of the (padded) R1CS
-    pub(crate) vk_large: PCS::VerifierKey,
+    pub vk_large: PCS::VerifierKey,
     // CVerifier PCS key enforcing the degree bound <= n - 2
-    pub(crate) vk_small: PCS::VerifierKey,
+    pub vk_small: PCS::VerifierKey,
 }
 
 impl<F> AuroraR1CS<F>
@@ -204,7 +207,7 @@ where
             .unwrap()
             .0;
 
-        // ======================== Computation of f_w and f_z ========================
+        // ======================== Computation of f_w ========================
 
         let zero_padded_witness = [vec![F::ZERO; num_instance_variables], witness.clone()].concat();
 

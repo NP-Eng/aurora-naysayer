@@ -1,14 +1,12 @@
-mod aurora;
-pub use aurora::AuroraR1CS;
+pub mod aurora;
+pub mod naysayer;
+pub mod reader;
 
-mod reader;
-
-#[cfg(test)]
+#[macro_export]
 macro_rules! TEST_DATA_PATH {
     () => {
         concat!(env!("CARGO_MANIFEST_DIR"), "/test-data/{}",)
     };
 }
 
-#[cfg(test)]
-pub(crate) use TEST_DATA_PATH;
+pub use aurora::AuroraR1CS;

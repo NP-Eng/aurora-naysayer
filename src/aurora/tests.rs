@@ -3,7 +3,7 @@ use crate::{aurora::pad_r1cs, reader::read_constraint_system, TEST_DATA_PATH};
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_ff::{Field, PrimeField};
-use ark_poly_commit::{test_sponge, TestUVLigero};
+use ark_poly_commit::{linear_codes::LinCodeParametersInfo, test_sponge, TestUVLigero};
 use ark_std::{test_rng, vec};
 
 fn to_sparse<F: PrimeField + From<i64>>(matrix: &Vec<Vec<i64>>) -> Vec<Vec<(F, usize)>> {
@@ -171,7 +171,11 @@ fn test_prove() {
 
     let sponge: PoseidonSponge<Fr> = test_sponge();
 
-    let (pk, vk) = AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
+    let (mut pk, mut vk) = AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
+    pk.ck_large.set_well_formedness(false);
+    pk.ck_small.set_well_formedness(false);
+    vk.vk_large.set_well_formedness(false);
+    vk.vk_small.set_well_formedness(false);
 
     let aurora_proof = AuroraR1CS::prove::<TestUVLigero<Fr>>(
         &pk,
