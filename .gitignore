@@ -1,2 +1,7 @@
 /target
 Cargo.lock
+# ignore files starting with repeated_squaring
+circom/repeated_squaring_*
+circom/witness*
+test-data/repeated_squaring*
+# circom/repeated-squaring_**
