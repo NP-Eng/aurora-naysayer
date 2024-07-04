@@ -1,10 +1,12 @@
 #![cfg(feature = "bench")]
+use std::process::Command;
+
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
 use ark_ff::Field;
 use ark_poly_commit::{linear_codes::LinCodeParametersInfo, test_sponge, TestUVLigero};
 use ark_std::test_rng;
-use criterion::{criterion_main, BatchSize, Criterion};
+use criterion::{criterion_main, BatchSize, BenchmarkId, Criterion};
 
 use aurora::{
     aurora::{AuroraProof, AuroraVerifierKey},
@@ -19,14 +21,58 @@ use aurora::{
 
 fn setup_bench(
     dishonesty: AuroraDishonesty,
+    num_squarings: usize,
 ) -> (
     AuroraProof<Fr, TestUVLigero<Fr>>,
     Vec<Fr>,
     AuroraVerifierKey<Fr, TestUVLigero<Fr>>,
 ) {
+    let x = Fr::from(3);
+    let mut y = x.clone();
+    for _ in 0..num_squarings {
+        y.square_in_place();
+    }
+
+    // call the python code to generate the circom file.
+    // then call `circom` r1cs and wasm files
+
+    // Define the Python script path and arguments
+    let python_script = "scripts/gen_solidity_repeated_squaring.py";
+    let circom_directory = "circom";
+
+    // Call the Python script to generate the circom and witness files
+    let output = Command::new("python")
+        .arg(python_script)
+        .arg(num_squarings.to_string())
+        .output()
+        .expect("Failed to execute Python script");
+
+    // Compile the circom file to get the R1CS and WASM files
+    let circom_file = format!(
+        "{}/repeated_squaring_{}.circom",
+        circom_directory, num_squarings
+    );
+    // let r1cs_file = format!(
+    //     "{}/repeated_squaring_{}.r1cs",
+    //     circom_directory, num_squarings
+    // );
+    // let wasm_file = format!(
+    //     "{}/repeated_squaring_{}.wasm",
+    //     circom_directory, num_squarings
+    // );
+
+    Command::new("circom")
+        .arg(&circom_file)
+        .arg("--r1cs")
+        .arg("--wasm")
+        .output()
+        .expect("Failed to compile circom file");
+
     let r1cs = read_constraint_system::<Fr>(
         &format!(TEST_DATA_PATH!(), "padding_test.r1cs"),
         &format!(TEST_DATA_PATH!(), "padding_test.wasm"),
+        x,
+        y,
     );
 
     // Instance: (1, a1, a2, b1, b2)
@@ -63,13 +109,13 @@ fn setup_bench(
     (proof, instance, vk)
 }
 
-fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
+fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty, n: usize) {
     let mut c = Criterion::default().sample_size(10);
     let mut group = c.benchmark_group("Verify");
 
     group.bench_function(label, |b| {
         b.iter_batched(
-            || setup_bench(dishonesty),
+            || setup_bench(dishonesty, n),
             |(proof, instance, vk)| {
                 AuroraR1CS::verify::<TestUVLigero<Fr>>(
                     &vk,
@@ -87,7 +133,7 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
 
     group.bench_function(label, |b| {
         b.iter_batched(
-            || setup_bench(dishonesty),
+            || setup_bench(dishonesty, n),
             |(proof, instance, vk)| aurora_naysay(&vk, proof, instance, &mut test_sponge::<Fr>()),
             BatchSize::SmallInput,
         );
@@ -99,7 +145,7 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
     group.bench_function(label, |b| {
         b.iter_batched(
             || {
-                let (proof, instance, vk) = setup_bench(dishonesty);
+                let (proof, instance, vk) = setup_bench(dishonesty, n);
                 let naysayer_proof = aurora_naysay(
                     &vk,
                     proof.clone(),
@@ -122,11 +168,17 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
     });
 }
 
+const NUM_SQUARINGS: usize = 10;
+
 fn bench_aurora() {
-    bench_with_dishonesty("Zero Test", AuroraDishonesty::FA);
-    bench_with_dishonesty("Univariate Sumcheck Test", AuroraDishonesty::FW);
-    bench_with_dishonesty("PCS on f_a", AuroraDishonesty::FAPostAbsorb);
-    bench_with_dishonesty("PCS on g_2", AuroraDishonesty::G2PostAbsorb);
+    bench_with_dishonesty("Zero Test", AuroraDishonesty::FA, NUM_SQUARINGS);
+    bench_with_dishonesty(
+        "Univariate Sumcheck Test",
+        AuroraDishonesty::FW,
+        NUM_SQUARINGS,
+    );
+    bench_with_dishonesty("PCS on f_a", AuroraDishonesty::FAPostAbsorb, NUM_SQUARINGS);
+    bench_with_dishonesty("PCS on g_2", AuroraDishonesty::G2PostAbsorb, NUM_SQUARINGS);
 }
 
 criterion_main!(bench_aurora);
