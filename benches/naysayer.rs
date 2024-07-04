@@ -1,5 +1,5 @@
 #![cfg(feature = "bench")]
-use std::process::Command;
+use std::{mem, process::Command};
 
 use ark_bn254::Fr;
 use ark_crypto_primitives::sponge::{Absorb, CryptographicSponge};
@@ -54,45 +54,35 @@ fn setup_bench(
         "{}/repeated_squaring_{}.circom",
         circom_directory, num_squarings
     );
-    // let r1cs_file = format!(
-    //     "{}/repeated_squaring_{}.r1cs",
-    //     circom_directory, num_squarings
-    // );
-    // let wasm_file = format!(
-    //     "{}/repeated_squaring_{}.wasm",
-    //     circom_directory, num_squarings
-    // );
 
     Command::new("circom")
         .arg(&circom_file)
         .arg("--r1cs")
         .arg("--wasm")
+        .arg("-o test-data/")
         .output()
         .expect("Failed to compile circom file");
 
     let r1cs = read_constraint_system::<Fr>(
-        &format!(TEST_DATA_PATH!(), "padding_test.r1cs"),
-        &format!(TEST_DATA_PATH!(), "padding_test.wasm"),
+        &format!(
+            TEST_DATA_PATH!(),
+            format!("repeated_squaring_{}.r1cs", num_squarings)
+        ),
+        &format!(
+            TEST_DATA_PATH!(),
+            format!(
+                "/repeated_squaring_{}_js/repeated_squaring_{}.wasm",
+                num_squarings, num_squarings
+            )
+        ),
         x,
         y,
     );
 
-    // Instance: (1, a1, a2, b1, b2)
-    let sol_c = Fr::from(42) * Fr::from(9 * 289).inverse().unwrap();
-    let sol_a2c = Fr::from(9) * sol_c;
-    let instance = vec![
-        Fr::ONE,
-        Fr::from(3),
-        Fr::from(9),
-        Fr::from(17),
-        Fr::from(289),
-    ];
-
-    let witness = vec![sol_c, sol_a2c];
-
     let sponge: KeccakSponge = test_sponge();
 
-    let (mut pk, mut vk) = AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
+    let (mut pk, mut vk) =
+        AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs.clone(), &mut test_rng()).unwrap();
 
     pk.ck_large.set_well_formedness(false);
     pk.ck_small.set_well_formedness(false);
@@ -101,14 +91,14 @@ fn setup_bench(
 
     let proof = dishonest_aurora_prove(
         &pk,
-        instance.clone(),
-        witness.clone(),
+        r1cs.instance_assignment.clone(),
+        r1cs.witness_assignment.clone(),
         (&vk.vk_large, &vk.vk_small),
         &mut sponge.clone(),
         dishonesty,
     );
 
-    (proof, instance, vk)
+    (proof, r1cs.instance_assignment.clone(), vk)
 }
 
 fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty, n: usize) {

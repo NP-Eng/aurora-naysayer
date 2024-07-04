@@ -11,6 +11,8 @@ pub fn read_constraint_system<F: PrimeField>(
     y: F,
 ) -> ConstraintSystem<F> {
     // Load the WASM and R1CS for witness and proof generation
+    // println!("r1cs_file: {:?}", r1cs_file.as_ref());
+    // println!("wasm_file: {:?}", wasm_file.as_ref());
     let cfg = CircomConfig::<F>::new(wasm_file, r1cs_file).unwrap();
 
     let mut builder = CircomBuilder::new(cfg);
@@ -19,6 +21,7 @@ pub fn read_constraint_system<F: PrimeField>(
     builder.push_input("y", Into::<BigInt>::into(Into::<BigUint>::into(y)));
 
     let circom = builder.build().unwrap();
+    // println!("witness: {:?}", circom.witness);
 
     let cs = ConstraintSystem::<F>::new_ref();
     circom.generate_constraints(cs.clone()).unwrap();
