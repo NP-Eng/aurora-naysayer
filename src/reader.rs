@@ -20,9 +20,6 @@ pub fn read_constraint_system<F: PrimeField>(
 
     let circom = builder.build().unwrap();
 
-    let witness = circom.witness.clone().unwrap();
-    println!("Witness: {:?}", witness);
-
     let cs = ConstraintSystem::<F>::new_ref();
     circom.generate_constraints(cs.clone()).unwrap();
     cs.into_inner().unwrap()
