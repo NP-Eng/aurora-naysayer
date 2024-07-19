@@ -1,0 +1,52 @@
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Verify/Zero Test        time:   [1.5540 ms 1.6063 ms 1.6653 ms]
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Naysay/Zero Test        time:   [1.5515 ms 1.5961 ms 1.6464 ms]
+Verify Naysay/Zero Test time:   [79.709 µs 83.054 µs 89.299 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+
+
+Verify/Univariate Sumcheck Test
+                        time:   [1.6240 ms 1.6552 ms 1.7021 ms]
+Naysay/Univariate Sumcheck Test
+                        time:   [1.6002 ms 1.6631 ms 1.7035 ms]
+Verify Naysay/Univariate Sumcheck Test
+                        time:   [160.73 µs 166.35 µs 173.19 µs]
+
+
+
+Verify/PCS on f_a       time:   [284.36 µs 290.29 µs 296.78 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+Naysay/PCS on f_a       time:   [319.18 µs 329.25 µs 341.88 µs]
+Verify Naysay/PCS on f_a
+                        time:   [75.407 µs 77.233 µs 80.744 µs]
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
+
+
+
+Verify/PCS on g_2       time:   [1.6032 ms 1.8169 ms 2.2783 ms]
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+Naysay/PCS on g_2       time:   [1.5989 ms 1.6566 ms 1.7197 ms]
+Verify Naysay/PCS on g_2
+                        time:   [76.022 µs 78.569 µs 82.774 µs]
+
+
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
