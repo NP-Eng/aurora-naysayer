@@ -2,31 +2,23 @@ use ark_circom::{CircomBuilder, CircomConfig};
 use ark_ff::PrimeField;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
 use ark_std::path::Path;
-use num_bigint::{BigInt, BigUint};
 
 pub fn read_constraint_system<F: PrimeField>(
     r1cs_file: impl AsRef<Path>,
     wasm_file: impl AsRef<Path>,
-    x: F,
-    y: F,
 ) -> ConstraintSystem<F> {
-    // Load the WASM and R1CS for witness and proof generation
-    // println!("r1cs_file: {:?}", r1cs_file.as_ref());
-    // println!("wasm_file: {:?}", wasm_file.as_ref());
     let cfg = CircomConfig::<F>::new(wasm_file, r1cs_file).unwrap();
 
-    let mut builder = CircomBuilder::new(cfg);
-    // this is an ugly hack for now. Ideally, `push_input already accepts `F` elements.
-    builder.push_input("x", Into::<BigInt>::into(Into::<BigUint>::into(x)));
-    builder.push_input("y", Into::<BigInt>::into(Into::<BigUint>::into(y)));
+    let builder = CircomBuilder::new(cfg);
 
-    let circom = builder.build().unwrap();
-    // println!("witness: {:?}", circom.witness);
+    let circom = builder.setup();
 
     let cs = ConstraintSystem::<F>::new_ref();
     circom.generate_constraints(cs.clone()).unwrap();
     cs.into_inner().unwrap()
 }
+
+
 
 #[cfg(test)]
 mod tests {

@@ -1,10 +1,11 @@
 #![cfg(feature = "bench")]
-use std::{mem, process::Command};
+use std::{path::Path, process::Command};
 
 use ark_bn254::Fr;
-use ark_crypto_primitives::sponge::{Absorb, CryptographicSponge};
-use ark_ff::Field;
+use ark_circom::{CircomBuilder, CircomConfig};
+use ark_ff::{Field, PrimeField};
 use ark_poly_commit::{linear_codes::LinCodeParametersInfo, TestUVLigero};
+use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
 use ark_std::test_rng;
 use criterion::{criterion_main, BatchSize, Criterion};
 
@@ -14,12 +15,32 @@ use aurora::{
         aurora_naysay, aurora_verify_naysay,
         tests::{dishonest_aurora_prove, AuroraDishonesty},
     },
-    reader::read_constraint_system,
     AuroraR1CS, TEST_DATA_PATH,
 };
 
 mod sponge;
+use num_bigint::{BigInt, BigUint};
 use sponge::{test_sponge, KeccakSponge};
+
+pub fn read_constraint_system_and_populate<F: PrimeField>(
+    r1cs_file: impl AsRef<Path>,
+    wasm_file: impl AsRef<Path>,
+    x: F,
+    y: F,
+) -> ConstraintSystem<F> {
+    let cfg = CircomConfig::<F>::new(wasm_file, r1cs_file).unwrap();
+
+    let mut builder = CircomBuilder::new(cfg);
+    // this is an ugly hack for now. Ideally, `push_input already accepts `F` elements.
+    builder.push_input("x", Into::<BigInt>::into(Into::<BigUint>::into(x)));
+    builder.push_input("y", Into::<BigInt>::into(Into::<BigUint>::into(y)));
+
+    let circom = builder.build().unwrap();
+
+    let cs = ConstraintSystem::<F>::new_ref();
+    circom.generate_constraints(cs.clone()).unwrap();
+    cs.into_inner().unwrap()
+}
 
 fn setup_bench(
     dishonesty: AuroraDishonesty,
@@ -63,7 +84,7 @@ fn setup_bench(
         .output()
         .expect("Failed to compile circom file");
 
-    let r1cs = read_constraint_system::<Fr>(
+    let r1cs = read_constraint_system_and_populate::<Fr>(
         &format!(
             TEST_DATA_PATH!(),
             format!("repeated_squaring_{}.r1cs", num_squarings)
