@@ -56,34 +56,6 @@ fn setup_bench(
         y.square_in_place();
     }
 
-    // call the python code to generate the circom file.
-    // then call `circom` r1cs and wasm files
-
-    // Define the Python script path and arguments
-    let python_script = "../scripts/gen_solidity_repeated_squaring.py";
-    let circom_directory = "circom";
-
-    // Call the Python script to generate the circom and witness files
-    let _ = Command::new("python3")
-        .arg(python_script)
-        .arg(num_squarings.to_string())
-        .output()
-        .expect("Failed to execute Python script");
-
-    // Compile the circom file to get the R1CS and WASM files
-    let circom_file = format!(
-        "{}/repeated_squaring_{}.circom",
-        circom_directory, num_squarings
-    );
-
-    Command::new("circom")
-        .arg(&circom_file)
-        .arg("--r1cs")
-        .arg("--wasm")
-        .arg("-o test-data/")
-        .output()
-        .expect("Failed to compile circom file");
-
     let r1cs = read_constraint_system_and_populate::<Fr>(
         &format!(
             TEST_DATA_PATH!(),
