@@ -281,150 +281,150 @@ where
     }
 }
 
-// #[test]
-// fn test_aurora_naysay() {
-//     let r1cs = read_constraint_system::<Fr>(
-//         &format!(TEST_DATA_PATH!(), "padding_test.r1cs"),
-//         &format!(TEST_DATA_PATH!(), "padding_test.wasm"),
-//     );
+#[test]
+fn test_aurora_naysay() {
+    let r1cs = read_constraint_system::<Fr>(
+        &format!(TEST_DATA_PATH!(), "padding_test.r1cs"),
+        &format!(TEST_DATA_PATH!(), "padding_test.wasm"),
+    );
 
-//     // Instance: (1, a1, a2, b1, b2)
-//     let sol_c = Fr::from(42) * Fr::from(9 * 289).inverse().unwrap();
-//     let sol_a2c = Fr::from(9) * sol_c;
-//     let instance = vec![
-//         Fr::ONE,
-//         Fr::from(3),
-//         Fr::from(9),
-//         Fr::from(17),
-//         Fr::from(289),
-//     ];
+    // Instance: (1, a1, a2, b1, b2)
+    let sol_c = Fr::from(42) * Fr::from(9 * 289).inverse().unwrap();
+    let sol_a2c = Fr::from(9) * sol_c;
+    let instance = vec![
+        Fr::ONE,
+        Fr::from(3),
+        Fr::from(9),
+        Fr::from(17),
+        Fr::from(289),
+    ];
 
-//     let witness = vec![sol_c, sol_a2c];
+    let witness = vec![sol_c, sol_a2c];
 
-//     let sponge: PoseidonSponge<Fr> = test_sponge();
+    let sponge: PoseidonSponge<Fr> = test_sponge();
 
-//     let (mut pk, mut vk) = AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
+    let (mut pk, mut vk) = AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
 
-//     pk.ck_large.set_well_formedness(false);
-//     pk.ck_small.set_well_formedness(false);
-//     vk.vk_large.set_well_formedness(false);
-//     vk.vk_small.set_well_formedness(false);
+    pk.ck_large.set_well_formedness(false);
+    pk.ck_small.set_well_formedness(false);
+    vk.vk_large.set_well_formedness(false);
+    vk.vk_small.set_well_formedness(false);
 
-//     let test_aurora_naysay_with =
-//         |dishonesty: AuroraDishonesty,
-//          expected_naysayer_proof: Option<AuroraNaysayerProof<Fr, TestUVLigero<Fr>>>| {
-//             let aurora_proof = dishonest_aurora_prove(
-//                 &pk,
-//                 instance.clone(),
-//                 witness.clone(),
-//                 (&vk.vk_large, &vk.vk_small),
-//                 &mut sponge.clone(),
-//                 dishonesty,
-//             );
+    let test_aurora_naysay_with =
+        |dishonesty: AuroraDishonesty,
+         expected_naysayer_proof: Option<AuroraNaysayerProof<Fr, TestUVLigero<Fr>>>| {
+            let aurora_proof = dishonest_aurora_prove(
+                &pk,
+                instance.clone(),
+                witness.clone(),
+                (&vk.vk_large, &vk.vk_small),
+                &mut sponge.clone(),
+                dishonesty,
+            );
 
-//             let naysayer_proof = aurora_naysay::<Fr, TestUVLigero<Fr>>(
-//                 &vk,
-//                 aurora_proof.clone(),
-//                 instance.clone(),
-//                 &mut sponge.clone(),
-//             )
-//             .unwrap();
+            let naysayer_proof = aurora_naysay::<Fr, TestUVLigero<Fr>>(
+                &vk,
+                aurora_proof.clone(),
+                instance.clone(),
+                &mut sponge.clone(),
+            )
+            .unwrap();
 
-//             println!("{:?}", naysayer_proof);
+            println!("{:?}", naysayer_proof);
 
-//             let naysayer_proof_matches = naysayer_proof == expected_naysayer_proof || {
-//                 if matches!(naysayer_proof, Some(AuroraNaysayerProof::PCSLarge { .. })) {
-//                     matches!(
-//                         expected_naysayer_proof,
-//                         Some(AuroraNaysayerProof::PCSLarge { .. })
-//                     )
-//                 } else if matches!(naysayer_proof, Some(AuroraNaysayerProof::PCSG2 { .. })) {
-//                     matches!(
-//                         expected_naysayer_proof,
-//                         Some(AuroraNaysayerProof::PCSG2 { .. })
-//                     )
-//                 } else {
-//                     false
-//                 }
-//             };
+            let naysayer_proof_matches = naysayer_proof == expected_naysayer_proof || {
+                if matches!(naysayer_proof, Some(AuroraNaysayerProof::PCSLarge { .. })) {
+                    matches!(
+                        expected_naysayer_proof,
+                        Some(AuroraNaysayerProof::PCSLarge { .. })
+                    )
+                } else if matches!(naysayer_proof, Some(AuroraNaysayerProof::PCSG2 { .. })) {
+                    matches!(
+                        expected_naysayer_proof,
+                        Some(AuroraNaysayerProof::PCSG2 { .. })
+                    )
+                } else {
+                    false
+                }
+            };
 
-//             assert!(naysayer_proof_matches);
+            assert!(naysayer_proof_matches);
 
-//             if dishonesty != AuroraDishonesty::None {
-//                 assert!(aurora_verify_naysay::<Fr, TestUVLigero<Fr>>(
-//                     &vk,
-//                     &aurora_proof,
-//                     &naysayer_proof.unwrap(),
-//                     instance.clone(),
-//                     &mut sponge.clone(),
-//                 )
-//                 .unwrap());
-//             }
-//         };
+            if dishonesty != AuroraDishonesty::None {
+                assert!(aurora_verify_naysay::<Fr, TestUVLigero<Fr>>(
+                    &vk,
+                    &aurora_proof,
+                    &naysayer_proof.unwrap(),
+                    instance.clone(),
+                    &mut sponge.clone(),
+                )
+                .unwrap());
+            }
+        };
 
-//     /***************** Case 1 *****************/
-//     // Honest proof verifies and is not naysaid
-//     test_aurora_naysay_with(AuroraDishonesty::None, None);
+    /***************** Case 1 *****************/
+    // Honest proof verifies and is not naysaid
+    test_aurora_naysay_with(AuroraDishonesty::None, None);
 
-//     /***************** Case 2 *****************/
-//     // Tamper with the polynomials f_a, f_b, f_c, f_0 before committing. The zero test fails
-//     // (f_a * f_b - f_c = f_0 * v_h)
-//     test_aurora_naysay_with(AuroraDishonesty::FA, Some(AuroraNaysayerProof::ZeroCheck));
-//     test_aurora_naysay_with(AuroraDishonesty::FB, Some(AuroraNaysayerProof::ZeroCheck));
-//     test_aurora_naysay_with(AuroraDishonesty::FC, Some(AuroraNaysayerProof::ZeroCheck));
-//     test_aurora_naysay_with(AuroraDishonesty::F0, Some(AuroraNaysayerProof::ZeroCheck));
+    /***************** Case 2 *****************/
+    // Tamper with the polynomials f_a, f_b, f_c, f_0 before committing. The zero test fails
+    // (f_a * f_b - f_c = f_0 * v_h)
+    test_aurora_naysay_with(AuroraDishonesty::FA, Some(AuroraNaysayerProof::ZeroCheck));
+    test_aurora_naysay_with(AuroraDishonesty::FB, Some(AuroraNaysayerProof::ZeroCheck));
+    test_aurora_naysay_with(AuroraDishonesty::FC, Some(AuroraNaysayerProof::ZeroCheck));
+    test_aurora_naysay_with(AuroraDishonesty::F0, Some(AuroraNaysayerProof::ZeroCheck));
 
-//     /***************** Case 3 *****************/
-//     // Tamper with the polynomials f_w, g_1, g_2 before committing. The univariate sumcheck fails
-//     // (u = v_h * g_1 + x * g_2, where u depends on f_w)
-//     test_aurora_naysay_with(
-//         AuroraDishonesty::FW,
-//         Some(AuroraNaysayerProof::UnivariateSumcheck),
-//     );
-//     test_aurora_naysay_with(
-//         AuroraDishonesty::G1,
-//         Some(AuroraNaysayerProof::UnivariateSumcheck),
-//     );
-//     test_aurora_naysay_with(
-//         AuroraDishonesty::G2,
-//         Some(AuroraNaysayerProof::UnivariateSumcheck),
-//     );
+    /***************** Case 3 *****************/
+    // Tamper with the polynomials f_w, g_1, g_2 before committing. The univariate sumcheck fails
+    // (u = v_h * g_1 + x * g_2, where u depends on f_w)
+    test_aurora_naysay_with(
+        AuroraDishonesty::FW,
+        Some(AuroraNaysayerProof::UnivariateSumcheck),
+    );
+    test_aurora_naysay_with(
+        AuroraDishonesty::G1,
+        Some(AuroraNaysayerProof::UnivariateSumcheck),
+    );
+    test_aurora_naysay_with(
+        AuroraDishonesty::G2,
+        Some(AuroraNaysayerProof::UnivariateSumcheck),
+    );
 
-//     /***************** Case 4 *****************/
-//     // Tamper with f_a and g_2 after absorbing the commitment. The PCS opening proof fails
-//     // We use an arbitrary PCS naysayer proof for this test, note that we are not testing the PCS
-//     // naysayer proof itself
-//     let dummy_pcs_naysayer_proof = LinearCodeNaysayerProof {
-//         incorrect_proof_index: 0,
-//         naysayer_proof_single: LinearCodeNaysayerProofSingle::EvaluationAssertion,
-//     };
+    /***************** Case 4 *****************/
+    // Tamper with f_a and g_2 after absorbing the commitment. The PCS opening proof fails
+    // We use an arbitrary PCS naysayer proof for this test, note that we are not testing the PCS
+    // naysayer proof itself
+    let dummy_pcs_naysayer_proof = LinearCodeNaysayerProof {
+        incorrect_proof_index: 0,
+        naysayer_proof_single: LinearCodeNaysayerProofSingle::EvaluationAssertion,
+    };
 
-//     test_aurora_naysay_with(
-//         AuroraDishonesty::FAPostAbsorb,
-//         Some(AuroraNaysayerProof::PCSLarge(
-//             dummy_pcs_naysayer_proof.clone(),
-//         )),
-//     );
+    test_aurora_naysay_with(
+        AuroraDishonesty::FAPostAbsorb,
+        Some(AuroraNaysayerProof::PCSLarge(
+            dummy_pcs_naysayer_proof.clone(),
+        )),
+    );
 
-//     /***************** Case 5 *****************/
-//     // Tamper with g_2 after absorbing the commitment. The PCS opening proof fails
-//     test_aurora_naysay_with(
-//         AuroraDishonesty::G2PostAbsorb,
-//         Some(AuroraNaysayerProof::PCSG2(dummy_pcs_naysayer_proof.clone())),
-//     );
+    /***************** Case 5 *****************/
+    // Tamper with g_2 after absorbing the commitment. The PCS opening proof fails
+    test_aurora_naysay_with(
+        AuroraDishonesty::G2PostAbsorb,
+        Some(AuroraNaysayerProof::PCSG2(dummy_pcs_naysayer_proof.clone())),
+    );
 
-//     /***************** Case 6 *****************/
-//     // Tamper with the evaluations sent to the naysayer. The PCS opening proofs fail
-//     (0..6).for_each(|i| {
-//         test_aurora_naysay_with(
-//             AuroraDishonesty::Evaluation(i),
-//             Some(AuroraNaysayerProof::PCSLarge(
-//                 dummy_pcs_naysayer_proof.clone(),
-//             )),
-//         );
-//     });
-//     test_aurora_naysay_with(
-//         AuroraDishonesty::Evaluation(6),
-//         Some(AuroraNaysayerProof::PCSG2(dummy_pcs_naysayer_proof)),
-//     );
-// }
+    /***************** Case 6 *****************/
+    // Tamper with the evaluations sent to the naysayer. The PCS opening proofs fail
+    (0..6).for_each(|i| {
+        test_aurora_naysay_with(
+            AuroraDishonesty::Evaluation(i),
+            Some(AuroraNaysayerProof::PCSLarge(
+                dummy_pcs_naysayer_proof.clone(),
+            )),
+        );
+    });
+    test_aurora_naysay_with(
+        AuroraDishonesty::Evaluation(6),
+        Some(AuroraNaysayerProof::PCSG2(dummy_pcs_naysayer_proof)),
+    );
+}

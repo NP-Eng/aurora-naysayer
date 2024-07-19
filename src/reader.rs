@@ -28,82 +28,82 @@ pub fn read_constraint_system<F: PrimeField>(
     cs.into_inner().unwrap()
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use ark_bn254::Fr;
-//     use ark_ff::Field;
+#[cfg(test)]
+mod tests {
+    use ark_bn254::Fr;
+    use ark_ff::Field;
 
-//     use super::*;
-//     use crate::TEST_DATA_PATH;
+    use super::*;
+    use crate::TEST_DATA_PATH;
 
-//     #[test]
-//     fn test_read_multiplication_r1cs() {
-//         // A, B, C
-//         // Each row is a constraint
-//         // Each column is a variable (1, instance entry or witness entry)
+    #[test]
+    fn test_read_multiplication_r1cs() {
+        // A, B, C
+        // Each row is a constraint
+        // Each column is a variable (1, instance entry or witness entry)
 
-//         // A = (0, 0, -1, 0)
-//         // B = (0, 0, 0, 1)
-//         // C = (0, -1, 0, 0)
+        // A = (0, 0, -1, 0)
+        // B = (0, 0, 0, 1)
+        // C = (0, -1, 0, 0)
 
-//         // z = (1, inst, wit) such that
-//         // Az (·) Bz = Cz
+        // z = (1, inst, wit) such that
+        // Az (·) Bz = Cz
 
-//         // z = (1, i_1), (w_1, w_2)
+        // z = (1, i_1), (w_1, w_2)
 
-//         // Az_1 = (0, 0, -1, 0) * ((1, i_1), (w_1, w_2) = -w_1
-//         // Bz_1 = (0, 0, 0, 1) * ((1, i_1), (w_1, w_2) = w_2
-//         // Cz_1 = (0, -1, 0, 0) * ((1, i_1), (w_1, w_2) = -i_1
+        // Az_1 = (0, 0, -1, 0) * ((1, i_1), (w_1, w_2) = -w_1
+        // Bz_1 = (0, 0, 0, 1) * ((1, i_1), (w_1, w_2) = w_2
+        // Cz_1 = (0, -1, 0, 0) * ((1, i_1), (w_1, w_2) = -i_1
 
-//         // P claims: (-w_1) * w_2 = -i_1
+        // P claims: (-w_1) * w_2 = -i_1
 
-//         let r1cs = read_constraint_system::<Fr>(
-//             &format!(TEST_DATA_PATH!(), "multiplication.r1cs"),
-//             &format!(TEST_DATA_PATH!(), "multiplication.wasm"),
-//         );
+        let r1cs = read_constraint_system::<Fr>(
+            &format!(TEST_DATA_PATH!(), "multiplication.r1cs"),
+            &format!(TEST_DATA_PATH!(), "multiplication.wasm"),
+        );
 
-//         let matrices = r1cs.to_matrices().unwrap();
+        let matrices = r1cs.to_matrices().unwrap();
 
-//         // A = (0, 0, -1, 0)
-//         assert!(matrices.a == vec![vec![(-Fr::ONE, 2)]]);
+        // A = (0, 0, -1, 0)
+        assert!(matrices.a == vec![vec![(-Fr::ONE, 2)]]);
 
-//         // B = (0, 0, 0, 1)
-//         assert!(matrices.b == vec![vec![(Fr::ONE, 3)]]);
+        // B = (0, 0, 0, 1)
+        assert!(matrices.b == vec![vec![(Fr::ONE, 3)]]);
 
-//         // C = (0, -1, 0, 0)
-//         assert!(matrices.c == vec![vec![(-Fr::ONE, 1)]]);
-//     }
+        // C = (0, -1, 0, 0)
+        assert!(matrices.c == vec![vec![(-Fr::ONE, 1)]]);
+    }
 
-//     #[test]
-//     fn test_read_sum_of_sqrts_r1cs() {
-//         // Explanation:
-//         //
-//         // The circuit, specificed in sum_of_sqrt.circom, contains the following
-//         // constraints:
-//         //    s1 * s1 = 5
-//         //    s2 * s2 = 7
-//         //    y = s1 + s2
-//         // The output y is public (instance), whereas the other two advice
-//         // signals are private (witness)
-//         //
-//         // The circom tooling automatically reduces the above constraints into an equivalent set:
-//         //    s1 * s1 = 5
-//         //    (y - s1) * (y - s1) = 7
-//         //
-//         // The solution vector structure is (1, y, s1), and therefore the
-//         // matrices capturing the R1CS are:
-//         // A = (0,  0, 1)  B = (0,  0, 1)  C = (5, 0, 0)
-//         //     (0, -1, 1)      (0, -1, 1)      (7, 0, 0)
+    #[test]
+    fn test_read_sum_of_sqrts_r1cs() {
+        // Explanation:
+        //
+        // The circuit, specificed in sum_of_sqrt.circom, contains the following
+        // constraints:
+        //    s1 * s1 = 5
+        //    s2 * s2 = 7
+        //    y = s1 + s2
+        // The output y is public (instance), whereas the other two advice
+        // signals are private (witness)
+        //
+        // The circom tooling automatically reduces the above constraints into an equivalent set:
+        //    s1 * s1 = 5
+        //    (y - s1) * (y - s1) = 7
+        //
+        // The solution vector structure is (1, y, s1), and therefore the
+        // matrices capturing the R1CS are:
+        // A = (0,  0, 1)  B = (0,  0, 1)  C = (5, 0, 0)
+        //     (0, -1, 1)      (0, -1, 1)      (7, 0, 0)
 
-//         let r1cs = read_constraint_system::<Fr>(
-//             &format!(TEST_DATA_PATH!(), "sum_of_sqrt.r1cs"),
-//             &format!(TEST_DATA_PATH!(), "sum_of_sqrt.wasm"),
-//         );
+        let r1cs = read_constraint_system::<Fr>(
+            &format!(TEST_DATA_PATH!(), "sum_of_sqrt.r1cs"),
+            &format!(TEST_DATA_PATH!(), "sum_of_sqrt.wasm"),
+        );
 
-//         let matrices = r1cs.to_matrices().unwrap();
+        let matrices = r1cs.to_matrices().unwrap();
 
-//         assert!(matrices.a == vec![vec![(Fr::ONE, 2)], vec![(Fr::ONE, 1), (-Fr::ONE, 2)]]);
-//         assert!(matrices.b == vec![vec![(Fr::ONE, 2)], vec![(Fr::ONE, 1), (-Fr::ONE, 2)]]);
-//         assert!(matrices.c == vec![vec![(Fr::from(5), 0)], vec![(Fr::from(7), 0)]])
-//     }
-// }
+        assert!(matrices.a == vec![vec![(Fr::ONE, 2)], vec![(Fr::ONE, 1), (-Fr::ONE, 2)]]);
+        assert!(matrices.b == vec![vec![(Fr::ONE, 2)], vec![(Fr::ONE, 1), (-Fr::ONE, 2)]]);
+        assert!(matrices.c == vec![vec![(Fr::from(5), 0)], vec![(Fr::from(7), 0)]])
+    }
+}
