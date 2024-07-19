@@ -49,7 +49,7 @@ def generate_witness(n):
     x = 3
     y = x
     for _ in range(n):
-        y = y * y
+        y = y * y % 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
     # Create the witness dictionary
     witness = {"x": str(x), "y": str(y)}
