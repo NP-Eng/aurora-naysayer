@@ -29,3 +29,17 @@ Depending on your Rust installation, the following runtime error may occur:
 ```
 
 This comes from a dependency. As a temporary fix, try running with rust 1.77.0: If not installed, run `rustup install 1.77.0` first. Then run `cargo +1.77.0 test`.
+
+## Benches
+
+To generate the setup files necessary for benchmarks, run:
+
+```sh
+scripts/prepare_benches.sh <NUM OF SQUARINGS>
+```
+
+Make sure you adapt the `NUM_SQUARINGS` variable in the `benches/naysayer.rs` script to match the script generated files, and then run: 
+
+```sh
+cargo bench --features=bench
+```
