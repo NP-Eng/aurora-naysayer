@@ -101,42 +101,31 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty, n: usize) {
     let (proof, instance, vk) = setup_bench(dishonesty, n);
 
     group.bench_function(label, |b| {
-        b.iter_with_setup(
-            || (proof.clone(), instance.clone()),
-            |(proof, instance)| {
-                AuroraR1CS::verify::<TestUVLigero<Fr>>(&vk, instance, proof, &mut test_sponge())
-            },
-        );
+        b.iter(|| {
+            AuroraR1CS::verify::<TestUVLigero<Fr>>(&vk, &instance, &proof, &mut test_sponge())
+        });
     });
 
     let mut c = Criterion::default().sample_size(10);
     let mut group = c.benchmark_group("Naysay");
 
     group.bench_function(label, |b| {
-        b.iter_with_setup(
-            || (proof.clone(), instance.clone()),
-            |(proof, instance)| aurora_naysay(&vk, proof, instance, &mut test_sponge()),
-        );
+        b.iter(|| aurora_naysay(&vk, &proof, &instance, &mut test_sponge()));
     });
 
     let mut c = Criterion::default().sample_size(10);
     let mut group = c.benchmark_group("Verify Naysay");
 
-    let naysayer_proof = aurora_naysay(&vk, proof.clone(), instance.clone(), &mut test_sponge())
+    let naysayer_proof = aurora_naysay(&vk, &proof, &instance, &mut test_sponge())
         .unwrap()
         .unwrap();
 
     group.bench_function(label, |b| {
-        b.iter_with_setup(
-            || (proof.clone(), instance.clone()),
-            |(proof, instance)| {
-                aurora_verify_naysay(&vk, &proof, &naysayer_proof, instance, &mut test_sponge())
-            },
-        );
+        b.iter(|| aurora_verify_naysay(&vk, &proof, &naysayer_proof, &instance, &mut test_sponge()));
     });
 }
 
-const NUM_SQUARINGS: usize = 10;
+const NUM_SQUARINGS: usize = 1 << 10;
 
 fn bench_aurora() {
     bench_with_dishonesty("Zero Test", AuroraDishonesty::FA, NUM_SQUARINGS);

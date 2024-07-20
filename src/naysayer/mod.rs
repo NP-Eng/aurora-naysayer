@@ -37,8 +37,8 @@ pub enum AuroraNaysayerProof<F: PrimeField + Absorb, NS: PCSNaysayer<F, DensePol
 // and the return type here will be Option<AuroraNaysayerProof>
 pub fn aurora_naysay<F, NS>(
     vk: &AuroraVerifierKey<F, NS>,
-    aurora_proof: AuroraProof<F, NS>,
-    instance: Vec<F>,
+    aurora_proof: &AuroraProof<F, NS>,
+    instance: &Vec<F>,
     sponge: &mut impl CryptographicSponge,
 ) -> Result<Option<AuroraNaysayerProof<F, NS>>, AuroraError<F, NS>>
 where
@@ -92,8 +92,8 @@ where
     }
 
     // Resize the instance to the padded length
-    let mut instance = instance;
-    instance.resize(num_instance_variables, F::ZERO);
+    let mut zero_padded_instance = instance.clone();
+    zero_padded_instance.resize(num_instance_variables + num_witness_variables, F::ZERO);
 
     // ======================== Naysay the proof ========================
 
@@ -110,7 +110,7 @@ where
 
     let pcs_naysay_large = NS::naysay(
         vk_large,
-        &large_coms,
+        large_coms,
         &a_point,
         large_evals.clone(),
         &large_opening_proof,
@@ -121,9 +121,9 @@ where
 
     let g_2_naysay = NS::naysay(
         vk_small,
-        &[com_g_2],
+        [com_g_2],
         &a_point,
-        vec![g_2_a],
+        [*g_2_a],
         &g_2_opening_proof,
         sponge,
         None,
@@ -159,8 +159,6 @@ where
     }
 
     // ======================== Univariate sumcheck test ========================
-    let zero_padded_instance = [instance.clone(), vec![F::ZERO; num_witness_variables]].concat();
-
     let lagrange_basis_evals = h.evaluate_all_lagrange_coefficients(a_point);
 
     // Returns f(a_point), where f is the unique polynomial of degree < n that
@@ -194,7 +192,7 @@ where
         + (p_r_a * f_b_a - q_br_a * f_z_a) * r_pow_n
         + (p_r_a * f_c_a - q_cr_a * f_z_a) * (r_pow_n * r_pow_n);
 
-    if u_a != g_1_a * v_h_a + g_2_a * a_point {
+    if u_a != g_1_a * v_h_a + *g_2_a * a_point {
         return Ok(Some(AuroraNaysayerProof::UnivariateSumcheck));
     }
 
@@ -212,7 +210,7 @@ pub fn aurora_verify_naysay<'a, F, NS>(
     vk: &AuroraVerifierKey<F, NS>,
     original_proof: &AuroraProof<F, NS>,
     naysayer_proof: &AuroraNaysayerProof<F, NS>,
-    instance: Vec<F>,
+    instance: &Vec<F>,
     sponge: &mut impl CryptographicSponge,
 ) -> Result<bool, AuroraError<F, NS>>
 where
@@ -248,10 +246,6 @@ where
         num_witness_variables,
         ..
     } = matrices;
-
-    // Resize the instance to the padded length
-    let mut instance = instance;
-    instance.resize(num_instance_variables, F::ZERO);
 
     // =================== Naysayer proof for the PCS ===================
 
@@ -311,8 +305,10 @@ where
             match naysayer_proof {
                 AuroraNaysayerProof::ZeroCheck => Ok(f_a_a * f_b_a - f_c_a != f_0_a * v_h_a),
                 AuroraNaysayerProof::UnivariateSumcheck => {
-                    let zero_padded_instance =
-                        [instance.clone(), vec![F::ZERO; num_witness_variables]].concat();
+                    // Resize the instance to the padded length
+                    let mut zero_padded_instance = instance.clone();
+                    zero_padded_instance
+                        .resize(num_instance_variables + num_witness_variables, F::ZERO);
 
                     let lagrange_basis_evals = h.evaluate_all_lagrange_coefficients(a_point);
 

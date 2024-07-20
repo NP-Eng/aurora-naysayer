@@ -324,8 +324,8 @@ fn test_aurora_naysay() {
 
             let naysayer_proof = aurora_naysay::<Fr, TestUVLigero<Fr>>(
                 &vk,
-                aurora_proof.clone(),
-                instance.clone(),
+                &aurora_proof,
+                &instance,
                 &mut sponge.clone(),
             )
             .unwrap();
@@ -355,7 +355,7 @@ fn test_aurora_naysay() {
                     &vk,
                     &aurora_proof,
                     &naysayer_proof.unwrap(),
-                    instance.clone(),
+                    &instance,
                     &mut sponge.clone(),
                 )
                 .unwrap());
