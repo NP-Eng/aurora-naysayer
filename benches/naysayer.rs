@@ -73,7 +73,7 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
             |(proof, instance, vk)| {
                 AuroraR1CS::verify::<TestUVLigero<Fr>>(
                     &vk,
-                    instance.clone(),
+                    &instance,
                     proof,
                     &mut test_sponge::<Fr>(),
                 )
