@@ -1,5 +1,5 @@
 #![cfg(feature = "bench")]
-use std::{path::Path, process::Command};
+use std::path::Path;
 
 use ark_bn254::Fr;
 use ark_circom::{CircomBuilder, CircomConfig};
@@ -7,7 +7,7 @@ use ark_ff::{Field, PrimeField};
 use ark_poly_commit::{linear_codes::LinCodeParametersInfo, TestUVLigero};
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
 use ark_std::test_rng;
-use criterion::{criterion_main, BatchSize, Criterion};
+use criterion::{criterion_main, Criterion};
 
 use aurora::{
     aurora::{AuroraProof, AuroraVerifierKey},
@@ -98,18 +98,14 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty, n: usize) {
     let mut c = Criterion::default().sample_size(10);
     let mut group = c.benchmark_group("Verify");
 
+    let (proof, instance, vk) = setup_bench(dishonesty, n);
+
     group.bench_function(label, |b| {
-        b.iter_batched(
-            || setup_bench(dishonesty, n),
-            |(proof, instance, vk)| {
-                AuroraR1CS::verify::<TestUVLigero<Fr>>(
-                    &vk,
-                    instance.clone(),
-                    proof,
-                    &mut test_sponge(),
-                )
+        b.iter_with_setup(
+            || (proof.clone(), instance.clone()),
+            |(proof, instance)| {
+                AuroraR1CS::verify::<TestUVLigero<Fr>>(&vk, instance, proof, &mut test_sponge())
             },
-            BatchSize::SmallInput,
         );
     });
 
@@ -117,28 +113,25 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty, n: usize) {
     let mut group = c.benchmark_group("Naysay");
 
     group.bench_function(label, |b| {
-        b.iter_batched(
-            || setup_bench(dishonesty, n),
-            |(proof, instance, vk)| aurora_naysay(&vk, proof, instance, &mut test_sponge()),
-            BatchSize::SmallInput,
+        b.iter_with_setup(
+            || (proof.clone(), instance.clone()),
+            |(proof, instance)| aurora_naysay(&vk, proof, instance, &mut test_sponge()),
         );
     });
 
     let mut c = Criterion::default().sample_size(10);
     let mut group = c.benchmark_group("Verify Naysay");
 
+    let naysayer_proof = aurora_naysay(&vk, proof.clone(), instance.clone(), &mut test_sponge())
+        .unwrap()
+        .unwrap();
+
     group.bench_function(label, |b| {
-        b.iter_batched(
-            || {
-                let (proof, instance, vk) = setup_bench(dishonesty, n);
-                let naysayer_proof =
-                    aurora_naysay(&vk, proof.clone(), instance.clone(), &mut test_sponge());
-                (proof, instance, vk, naysayer_proof.unwrap().unwrap())
-            },
-            |(proof, instance, vk, naysayer_proof)| {
+        b.iter_with_setup(
+            || (proof.clone(), instance.clone()),
+            |(proof, instance)| {
                 aurora_verify_naysay(&vk, &proof, &naysayer_proof, instance, &mut test_sponge())
             },
-            BatchSize::SmallInput,
         );
     });
 }
