@@ -113,21 +113,34 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty, n: usize) {
         b.iter(|| aurora_naysay(&vk, &proof, &instance, &mut test_sponge()));
     });
 
-    let mut c = Criterion::default().sample_size(10);
-    let mut group = c.benchmark_group("Verify Naysay");
-
-    let naysayer_proof = aurora_naysay(&vk, &proof, &instance, &mut test_sponge())
-        .unwrap()
-        .unwrap();
-
-    group.bench_function(label, |b| {
-        b.iter(|| aurora_verify_naysay(&vk, &proof, &naysayer_proof, &instance, &mut test_sponge()));
-    });
+    // shouldn't panic if we're benching an honest case
+    match dishonesty {
+        AuroraDishonesty::None => return,
+        _ => {
+            let mut c = Criterion::default().sample_size(10);
+            let mut group = c.benchmark_group("Verify Naysay");
+            let naysayer_proof = aurora_naysay(&vk, &proof, &instance, &mut test_sponge())
+                .unwrap()
+                .unwrap();
+            group.bench_function(label, |b| {
+                b.iter(|| {
+                    aurora_verify_naysay(
+                        &vk,
+                        &proof,
+                        &naysayer_proof,
+                        &instance,
+                        &mut test_sponge(),
+                    )
+                });
+            });
+        }
+    }
 }
 
 const NUM_SQUARINGS: usize = 1 << 10;
 
 fn bench_aurora() {
+    bench_with_dishonesty("Honest", AuroraDishonesty::None, NUM_SQUARINGS);
     bench_with_dishonesty("Zero Test", AuroraDishonesty::FA, NUM_SQUARINGS);
     bench_with_dishonesty(
         "Univariate Sumcheck Test",
