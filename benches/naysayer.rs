@@ -73,8 +73,8 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
             |(proof, instance, vk)| {
                 AuroraR1CS::verify::<TestUVLigero<Fr>>(
                     &vk,
-                    instance.clone(),
-                    proof,
+                    &instance,
+                    &proof,
                     &mut test_sponge::<Fr>(),
                 )
             },
@@ -88,7 +88,7 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
     group.bench_function(label, |b| {
         b.iter_batched(
             || setup_bench(dishonesty),
-            |(proof, instance, vk)| aurora_naysay(&vk, proof, instance, &mut test_sponge::<Fr>()),
+            |(proof, instance, vk)| aurora_naysay(&vk, &proof, &instance, &mut test_sponge::<Fr>()),
             BatchSize::SmallInput,
         );
     });
@@ -100,12 +100,8 @@ fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
         b.iter_batched(
             || {
                 let (proof, instance, vk) = setup_bench(dishonesty);
-                let naysayer_proof = aurora_naysay(
-                    &vk,
-                    proof.clone(),
-                    instance.clone(),
-                    &mut test_sponge::<Fr>(),
-                );
+                let naysayer_proof =
+                    aurora_naysay(&vk, &proof, &instance, &mut test_sponge::<Fr>());
                 (proof, instance, vk, naysayer_proof.unwrap().unwrap())
             },
             |(proof, instance, vk, naysayer_proof)| {
