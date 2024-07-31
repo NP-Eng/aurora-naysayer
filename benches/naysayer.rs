@@ -1,50 +1,81 @@
 #![cfg(feature = "bench")]
+use std::path::Path;
+
 use ark_bn254::Fr;
-use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
-use ark_ff::Field;
-use ark_poly_commit::{linear_codes::LinCodeParametersInfo, test_sponge, TestUVLigero};
+use ark_circom::{CircomBuilder, CircomConfig};
+use ark_ff::{Field, PrimeField};
+use ark_poly_commit::{linear_codes::LinCodeParametersInfo, TestUVLigero};
+use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
 use ark_std::test_rng;
-use criterion::{criterion_main, BatchSize, Criterion};
+use criterion::{criterion_main, Criterion};
 
 use aurora::{
     aurora::{AuroraProof, AuroraVerifierKey},
     naysayer::{
         aurora_naysay, aurora_verify_naysay,
         tests::{dishonest_aurora_prove, AuroraDishonesty},
-        AuroraNaysayerProof,
     },
-    reader::read_constraint_system,
     AuroraR1CS, TEST_DATA_PATH,
 };
 
+mod sponge;
+use num_bigint::{BigInt, BigUint};
+use sponge::{test_sponge, KeccakSponge};
+
+pub fn read_constraint_system_and_populate<F: PrimeField>(
+    r1cs_file: impl AsRef<Path>,
+    wasm_file: impl AsRef<Path>,
+    x: F,
+    y: F,
+) -> ConstraintSystem<F> {
+    let cfg = CircomConfig::<F>::new(wasm_file, r1cs_file).unwrap();
+
+    let mut builder = CircomBuilder::new(cfg);
+    // this is an ugly hack for now. Ideally, `push_input already accepts `F` elements.
+    builder.push_input("x", Into::<BigInt>::into(Into::<BigUint>::into(x)));
+    builder.push_input("y", Into::<BigInt>::into(Into::<BigUint>::into(y)));
+
+    let circom = builder.build().unwrap();
+
+    let cs = ConstraintSystem::<F>::new_ref();
+    circom.generate_constraints(cs.clone()).unwrap();
+    cs.into_inner().unwrap()
+}
+
 fn setup_bench(
     dishonesty: AuroraDishonesty,
+    num_squarings: usize,
 ) -> (
     AuroraProof<Fr, TestUVLigero<Fr>>,
     Vec<Fr>,
     AuroraVerifierKey<Fr, TestUVLigero<Fr>>,
 ) {
-    let r1cs = read_constraint_system::<Fr>(
-        &format!(TEST_DATA_PATH!(), "padding_test.r1cs"),
-        &format!(TEST_DATA_PATH!(), "padding_test.wasm"),
+    let x = Fr::from(3);
+    let mut y = x.clone();
+    for _ in 0..num_squarings {
+        y.square_in_place();
+    }
+
+    let r1cs = read_constraint_system_and_populate::<Fr>(
+        &format!(
+            TEST_DATA_PATH!(),
+            format!("repeated_squaring_{}.r1cs", num_squarings)
+        ),
+        &format!(
+            TEST_DATA_PATH!(),
+            format!(
+                "/repeated_squaring_{}_js/repeated_squaring_{}.wasm",
+                num_squarings, num_squarings
+            )
+        ),
+        x,
+        y,
     );
 
-    // Instance: (1, a1, a2, b1, b2)
-    let sol_c = Fr::from(42) * Fr::from(9 * 289).inverse().unwrap();
-    let sol_a2c = Fr::from(9) * sol_c;
-    let instance = vec![
-        Fr::ONE,
-        Fr::from(3),
-        Fr::from(9),
-        Fr::from(17),
-        Fr::from(289),
-    ];
+    let sponge: KeccakSponge = test_sponge();
 
-    let witness = vec![sol_c, sol_a2c];
-
-    let sponge: PoseidonSponge<Fr> = test_sponge();
-
-    let (mut pk, mut vk) = AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs, &mut test_rng()).unwrap();
+    let (mut pk, mut vk) =
+        AuroraR1CS::setup::<TestUVLigero<Fr>>(r1cs.clone(), &mut test_rng()).unwrap();
 
     pk.ck_large.set_well_formedness(false);
     pk.ck_small.set_well_formedness(false);
@@ -53,76 +84,71 @@ fn setup_bench(
 
     let proof = dishonest_aurora_prove(
         &pk,
-        instance.clone(),
-        witness.clone(),
+        r1cs.instance_assignment.clone(),
+        r1cs.witness_assignment.clone(),
         (&vk.vk_large, &vk.vk_small),
         &mut sponge.clone(),
         dishonesty,
     );
 
-    (proof, instance, vk)
+    (proof, r1cs.instance_assignment.clone(), vk)
 }
 
-fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty) {
+fn bench_with_dishonesty(label: &str, dishonesty: AuroraDishonesty, n: usize) {
     let mut c = Criterion::default().sample_size(10);
     let mut group = c.benchmark_group("Verify");
 
+    let (proof, instance, vk) = setup_bench(dishonesty, n);
+
     group.bench_function(label, |b| {
-        b.iter_batched(
-            || setup_bench(dishonesty),
-            |(proof, instance, vk)| {
-                AuroraR1CS::verify::<TestUVLigero<Fr>>(
-                    &vk,
-                    &instance,
-                    &proof,
-                    &mut test_sponge::<Fr>(),
-                )
-            },
-            BatchSize::SmallInput,
-        );
+        b.iter(|| {
+            AuroraR1CS::verify::<TestUVLigero<Fr>>(&vk, &instance, &proof, &mut test_sponge())
+        });
     });
 
     let mut c = Criterion::default().sample_size(10);
     let mut group = c.benchmark_group("Naysay");
 
     group.bench_function(label, |b| {
-        b.iter_batched(
-            || setup_bench(dishonesty),
-            |(proof, instance, vk)| aurora_naysay(&vk, &proof, &instance, &mut test_sponge::<Fr>()),
-            BatchSize::SmallInput,
-        );
+        b.iter(|| aurora_naysay(&vk, &proof, &instance, &mut test_sponge()));
     });
 
-    let mut c = Criterion::default().sample_size(10);
-    let mut group = c.benchmark_group("Verify Naysay");
-
-    group.bench_function(label, |b| {
-        b.iter_batched(
-            || {
-                let (proof, instance, vk) = setup_bench(dishonesty);
-                let naysayer_proof =
-                    aurora_naysay(&vk, &proof, &instance, &mut test_sponge::<Fr>());
-                (proof, instance, vk, naysayer_proof.unwrap().unwrap())
-            },
-            |(proof, instance, vk, naysayer_proof)| {
-                aurora_verify_naysay(
-                    &vk,
-                    &proof,
-                    &naysayer_proof,
-                    instance,
-                    &mut test_sponge::<Fr>(),
-                )
-            },
-            BatchSize::SmallInput,
-        );
-    });
+    // shouldn't panic if we're benching an honest case
+    match dishonesty {
+        AuroraDishonesty::None => return,
+        _ => {
+            let mut c = Criterion::default().sample_size(10);
+            let mut group = c.benchmark_group("Verify Naysay");
+            let naysayer_proof = aurora_naysay(&vk, &proof, &instance, &mut test_sponge())
+                .unwrap()
+                .unwrap();
+            group.bench_function(label, |b| {
+                b.iter(|| {
+                    aurora_verify_naysay(
+                        &vk,
+                        &proof,
+                        &naysayer_proof,
+                        &instance,
+                        &mut test_sponge(),
+                    )
+                });
+            });
+        }
+    }
 }
 
+const NUM_SQUARINGS: usize = 1 << 10;
+
 fn bench_aurora() {
-    bench_with_dishonesty("Zero Test", AuroraDishonesty::FA);
-    bench_with_dishonesty("Univariate Sumcheck Test", AuroraDishonesty::FW);
-    bench_with_dishonesty("PCS on f_a", AuroraDishonesty::FAPostAbsorb);
-    bench_with_dishonesty("PCS on g_2", AuroraDishonesty::G2PostAbsorb);
+    bench_with_dishonesty("Honest", AuroraDishonesty::None, NUM_SQUARINGS);
+    bench_with_dishonesty("Zero Test", AuroraDishonesty::FA, NUM_SQUARINGS);
+    bench_with_dishonesty(
+        "Univariate Sumcheck Test",
+        AuroraDishonesty::FW,
+        NUM_SQUARINGS,
+    );
+    bench_with_dishonesty("PCS on f_a", AuroraDishonesty::FAPostAbsorb, NUM_SQUARINGS);
+    bench_with_dishonesty("PCS on g_2", AuroraDishonesty::G2PostAbsorb, NUM_SQUARINGS);
 }
 
 criterion_main!(bench_aurora);

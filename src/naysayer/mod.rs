@@ -206,7 +206,7 @@ pub fn aurora_verify_naysay<'a, F, NS>(
     vk: &AuroraVerifierKey<F, NS>,
     original_proof: &AuroraProof<F, NS>,
     naysayer_proof: &AuroraNaysayerProof<F, NS>,
-    instance: Vec<F>,
+    instance: &Vec<F>,
     sponge: &mut impl CryptographicSponge,
 ) -> Result<bool, AuroraError<F, NS>>
 where

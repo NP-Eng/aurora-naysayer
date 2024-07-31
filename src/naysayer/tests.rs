@@ -355,7 +355,7 @@ fn test_aurora_naysay() {
                     &vk,
                     &aurora_proof,
                     &naysayer_proof.unwrap(),
-                    instance.clone(),
+                    &instance,
                     &mut sponge.clone(),
                 )
                 .unwrap());
