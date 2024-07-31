@@ -69,7 +69,6 @@ where
         c,
         num_constraints: n,
         num_instance_variables,
-        num_witness_variables,
         ..
     } = matrices;
 
@@ -90,10 +89,6 @@ where
             expected: *unpadded_num_instance_variables,
         });
     }
-
-    // Resize the instance to the padded length
-    let mut zero_padded_instance = instance.clone();
-    zero_padded_instance.resize(num_instance_variables + num_witness_variables, F::ZERO);
 
     // ======================== Naysay the proof ========================
 
@@ -166,9 +161,10 @@ where
     //  - a one-time evaluation of the Lagrange basis over h at a_point
     //    (lagrange_basis_evals), which is amortised over all calls
     //  - a one-time inner product of size n per call.
-    let h_evaluate_interpolator = |evals: &Vec<F>| inner_product(&evals, &lagrange_basis_evals);
+    let h_evaluate_interpolator =
+        |evals: &Vec<F>| inner_product(&evals, &lagrange_basis_evals[0..evals.len()]);
 
-    let v_star_a = h_evaluate_interpolator(&zero_padded_instance);
+    let v_star_a = h_evaluate_interpolator(&instance);
 
     let v_h_in_a: F = h
         .elements()
@@ -243,13 +239,8 @@ where
         c,
         num_constraints: n,
         num_instance_variables,
-        num_witness_variables,
         ..
     } = matrices;
-
-    // Resize the instance to the padded length
-    let mut instance = instance;
-    instance.resize(num_instance_variables, F::ZERO);
 
     // =================== Naysayer proof for the PCS ===================
 
@@ -309,15 +300,13 @@ where
             match naysayer_proof {
                 AuroraNaysayerProof::ZeroCheck => Ok(f_a_a * f_b_a - f_c_a != f_0_a * v_h_a),
                 AuroraNaysayerProof::UnivariateSumcheck => {
-                    let zero_padded_instance =
-                        [instance.clone(), vec![F::ZERO; num_witness_variables]].concat();
-
                     let lagrange_basis_evals = h.evaluate_all_lagrange_coefficients(a_point);
 
-                    let h_evaluate_interpolator =
-                        |evals: &Vec<F>| inner_product(&evals, &lagrange_basis_evals);
+                    let h_evaluate_interpolator = |evals: &Vec<F>| {
+                        inner_product(&evals, &lagrange_basis_evals[0..evals.len()])
+                    };
 
-                    let v_star_a = h_evaluate_interpolator(&zero_padded_instance);
+                    let v_star_a = h_evaluate_interpolator(&instance);
 
                     let v_h_in_a: F = h
                         .elements()
