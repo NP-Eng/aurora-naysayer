@@ -188,8 +188,8 @@ fn test_prove() {
 
     assert!(AuroraR1CS::verify::<TestUVLigero<Fr>>(
         &vk,
-        instance,
-        aurora_proof,
+        &instance,
+        &aurora_proof,
         &mut sponge.clone()
     )
     .unwrap());
